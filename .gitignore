@@ -1,0 +1,43 @@
+HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# Ignore workspace related files
+src/main/java/**/WorkSpaceController.java
+src/main/java/**/WorkSpaceCreateRequest.java
+src/main/java/**/WorkSpace.java
+src/main/java/**/WorkSpace_Member.java
+src/main/java/**/WorkSpaceType.java
+src/main/java/**/WorkSpaceRepo.java
+src/main/java/**/WorkSpaceService.java
+
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
