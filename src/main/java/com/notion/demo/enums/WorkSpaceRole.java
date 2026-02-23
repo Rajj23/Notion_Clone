@@ -1,6 +1,6 @@
 package com.notion.demo.entity;
 
-public enum ROLE {
+public enum WorkSpaceRole {
     OWNER,
     ADMIN,
     MEMBER,
