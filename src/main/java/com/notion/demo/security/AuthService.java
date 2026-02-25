@@ -1,8 +1,10 @@
 package com.notion.demo.security;
 
-import com.notion.demo.DTO.*;
-import com.notion.demo.Exception.InvalidTokenException;
+import com.notion.demo.dto.*;
+import com.notion.demo.exception.EmailAlreadyExistException;
+import com.notion.demo.exception.InvalidTokenException;
 import com.notion.demo.entity.User;
+import com.notion.demo.exception.UserNotFoundException;
 import com.notion.demo.repo.UserRepo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -42,7 +44,7 @@ public class AuthService {
     public SignupResponseDTO signup(SignupRequestDTO signupRequestDTO){
         Optional<User> existingUser = userRepo.findByEmail(signupRequestDTO.getEmail());
         if(existingUser.isPresent()){
-            throw new RuntimeException("User find with same email!");
+            throw new EmailAlreadyExistException("User find with same email!");
         }
 
         User user = userRepo.save(User.builder()
@@ -68,7 +70,7 @@ public class AuthService {
         String email = jwtUtil.getEmailFromToken(refreshToken);
         
         User user = userRepo.findByEmail(email)
-                .orElseThrow(()-> new RuntimeException("User not found with email: " + email));
+                .orElseThrow(()-> new UserNotFoundException("User not found with email: " + email));
         
         if(!passwordEncoder.matches(refreshToken, user.getRefreshToken())){
             throw new InvalidTokenException("Refresh token does not match");

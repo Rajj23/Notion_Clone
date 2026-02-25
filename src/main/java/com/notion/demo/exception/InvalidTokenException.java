@@ -1,4 +1,4 @@
-package com.notion.demo.Exception;
+package com.notion.demo.exception;
 
 public class InvalidTokenException extends RuntimeException{
     public InvalidTokenException(String message) {

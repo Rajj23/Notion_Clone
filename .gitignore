@@ -4,15 +4,6 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
-# Ignore workspace related files
-src/main/java/**/WorkSpaceController.java
-src/main/java/**/WorkSpaceCreateRequest.java
-src/main/java/**/WorkSpace.java
-src/main/java/**/WorkSpace_Member.java
-src/main/java/**/WorkSpaceType.java
-src/main/java/**/WorkSpaceRepo.java
-src/main/java/**/WorkSpaceService.java
-
 
 ### STS ###
 .apt_generated

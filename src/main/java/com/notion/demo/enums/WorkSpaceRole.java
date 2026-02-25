@@ -1,4 +1,4 @@
-package com.notion.demo.entity;
+package com.notion.demo.enums;
 
 public enum WorkSpaceRole {
     OWNER,
