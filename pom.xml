@@ -8,11 +8,11 @@
 		<version>4.0.2</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>com.notion</groupId>
-	<artifactId>demo</artifactId>
+	<groupId>com.blockverse</groupId>
+	<artifactId>blockverse-app</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>Notion</name>
-	<description>Notion clone</description>
+	<name>BlockVerse</name>
+	<description>BlockVerse — A workspace app</description>
 	<url/>
 	<licenses>
 		<license/>

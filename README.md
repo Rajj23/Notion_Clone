@@ -1,4 +1,4 @@
-# Notion Clone — Backend API
+# BlockVerse — Backend API
 
 <p align="center">
   <img src="https://img.shields.io/badge/Java-21-orange?style=flat-square&logo=openjdk&logoColor=white" alt="Java 21" />
@@ -9,15 +9,15 @@
   <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="MIT" />
 </p>
 
-REST API backend for a Notion-style workspace app. JWT auth, workspace CRUD, role-based member management — built with Spring Boot 4 and Java 21.
+REST API backend for a workspace and collaboration app. JWT auth, workspace CRUD, role-based member management — built with Spring Boot 4 and Java 21.
 
 ---
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/Rajj23/Notion_Clone.git
-cd Notion_Clone
+git clone https://github.com/Rajj23/BlockVerse.git
+cd BlockVerse
 mvn clean install
 mvn spring-boot:run
 ```
@@ -145,7 +145,7 @@ mvn test
 ## Project Structure
 
 ```
-src/main/java/com/notion/demo/
+src/main/java/com/blockverse/app/
 ├── config/        # AppConfig, beans
 ├── controller/    # AuthController, WorkSpaceController, WorkSpaceMemberController
 ├── dto/           # Request/response DTOs with Bean Validation
