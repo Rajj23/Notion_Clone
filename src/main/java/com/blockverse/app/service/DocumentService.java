@@ -40,7 +40,7 @@ public class DocumentService {
         return workSpaceRepo.findById(workspaceId)
                 .orElseThrow(() -> new WorkSpaceNotFoundException("Workspace not found"));
     }
-    
+
     private Document getDocumentOrThrow(int documentId) {
         return documentRepo.findById(documentId)
                 .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
@@ -66,24 +66,24 @@ public class DocumentService {
 
         return documentMapper.toResponse(document);
     }
-    
+
     public DocumentResponse getDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
-        
+
         Document document = getDocumentOrThrow(documentId);
-        
+
         WorkSpaceMember membership = getMembershipOrThrow(user, document.getWorkSpace());
 
         return documentMapper.toResponse(document);
     }
-    
+
     public DocumentDetailsResponse getDocumentWithBlocks(int documentId) {
         User user = securityUtil.getLoggedInUser();
-        
+
         Document document = getDocumentOrThrow(documentId);
-        
+
         WorkSpaceMember membership = getMembershipOrThrow(user, document.getWorkSpace());
-        
+
         List<BlockResponse> blocks = blockService.getBlocksForDocument(documentId);
 
         return DocumentDetailsResponse.builder()
@@ -91,10 +91,10 @@ public class DocumentService {
                 .blocks(blocks)
                 .build();
     }
-    
+
     public DocumentResponse updateDocument(int documentId, UpdateDocumentRequest request) {
         User user = securityUtil.getLoggedInUser();
-        
+
         Document document = getDocumentOrThrow(documentId);
 
         WorkSpaceMember membership = getMembershipOrThrow(user, document.getWorkSpace());
@@ -104,10 +104,10 @@ public class DocumentService {
 
         return documentMapper.toResponse(document);
     }
-    
+
     public List<DocumentResponse> getDocumentsByWorkspace(int workspaceId) {
         User user = securityUtil.getLoggedInUser();
-        
+
         WorkSpace workSpace = getWorkSpaceOrThrow(workspaceId);
 
         WorkSpaceMember membership = getMembershipOrThrow(user, workSpace);
@@ -118,35 +118,35 @@ public class DocumentService {
                 .map(documentMapper::toResponse)
                 .toList();
     }
-    
+
     public void archiveDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
-        
+
         Document document = getDocumentOrThrow(documentId);
 
         WorkSpaceMember membership = getMembershipOrThrow(user, document.getWorkSpace());
-        
-        if(membership.getRole() != WorkSpaceRole.OWNER || membership.getRole() != WorkSpaceRole.ADMIN) {
+
+        if (membership.getRole() != WorkSpaceRole.OWNER && membership.getRole() != WorkSpaceRole.ADMIN) {
             throw new InsufficientPermissionException("Only workspace owners or admin can archive documents");
         }
 
         document.setArchived(true);
         documentRepo.save(document);
     }
-    
+
     public void unarchiveDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
-        
+
         Document document = getDocumentOrThrow(documentId);
 
         WorkSpaceMember membership = getMembershipOrThrow(user, document.getWorkSpace());
 
-        if(membership.getRole() != WorkSpaceRole.OWNER || membership.getRole() != WorkSpaceRole.ADMIN) {
+        if (membership.getRole() != WorkSpaceRole.OWNER && membership.getRole() != WorkSpaceRole.ADMIN) {
             throw new InsufficientPermissionException("Only workspace owners or admin can unarchive documents");
         }
 
         document.setArchived(false);
         documentRepo.save(document);
     }
-    
+
 }
