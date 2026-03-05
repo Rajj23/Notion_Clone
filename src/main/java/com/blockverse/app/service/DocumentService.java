@@ -4,6 +4,7 @@ import com.blockverse.app.dto.block.BlockResponse;
 import com.blockverse.app.dto.document.CreateDocumentRequest;
 import com.blockverse.app.dto.document.DocumentDetailsResponse;
 import com.blockverse.app.dto.document.DocumentResponse;
+import com.blockverse.app.dto.document.UpdateDocumentRequest;
 import com.blockverse.app.entity.Document;
 import com.blockverse.app.entity.User;
 import com.blockverse.app.entity.WorkSpace;
@@ -91,14 +92,14 @@ public class DocumentService {
                 .build();
     }
     
-    public DocumentResponse updateDocument(int documentId, String newTitle) {
+    public DocumentResponse updateDocument(int documentId, UpdateDocumentRequest request) {
         User user = securityUtil.getLoggedInUser();
         
         Document document = getDocumentOrThrow(documentId);
 
         WorkSpaceMember membership = getMembershipOrThrow(user, document.getWorkSpace());
 
-        document.setTitle(newTitle);
+        document.setTitle(request.getTitle());
         documentRepo.save(document);
 
         return documentMapper.toResponse(document);
