@@ -2,7 +2,9 @@ package com.blockverse.app.service;
 
 import com.blockverse.app.dto.block.*;
 import com.blockverse.app.entity.*;
+import com.blockverse.app.exception.BlockNotFoundException;
 import com.blockverse.app.exception.DocumentNotFoundException;
+import com.blockverse.app.exception.NotWorkSpaceMemberException;
 import com.blockverse.app.mapper.BlockMapper;
 import com.blockverse.app.repo.BlockRepo;
 import com.blockverse.app.repo.DocumentRepo;
@@ -37,12 +39,12 @@ public class BlockService {
     
     private WorkSpaceMember getMembershipOrThrow(User user, WorkSpace workSpace) {
         return workSpaceMemberRepo.findByUserAndWorkSpaceAndDeletedAtIsNull(user, workSpace)
-                .orElseThrow(() -> new RuntimeException("User is not a member of this workspace"));
+                .orElseThrow(() -> new NotWorkSpaceMemberException("User is not a member of this workspace"));
     }
     
     private Block getBlockOrThrow(int blockId) {
         return blockRepo.findById(blockId)
-                .orElseThrow(() -> new RuntimeException("Block not found"));
+                .orElseThrow(() -> new BlockNotFoundException("Block not found"));
     }
     
     private boolean isDescendant(Block block, Block potentialAncestor){

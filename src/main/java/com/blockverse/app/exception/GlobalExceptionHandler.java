@@ -62,6 +62,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleDocumentNotFound(DocumentNotFoundException ex){
         return buildError(HttpStatus.NOT_FOUND, ex.getMessage());
     }
+    
+    @ExceptionHandler(BlockNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleBlockNotFound(BlockNotFoundException ex){
+        return buildError(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationException(
