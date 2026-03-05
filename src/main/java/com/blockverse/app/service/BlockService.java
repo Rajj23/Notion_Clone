@@ -80,13 +80,13 @@ public class BlockService {
         block.setContent(request.getContent());
         block.setType(request.getType());
 
-        BigInteger position = BigInteger.valueOf(1000);
+        BigInteger position = BigInteger.valueOf(10000);
         List<Block> siblings = blockRepo.
                 findByDocumentAndParentAndDeletedFalseOrderByPositionAsc(document, parent);
         if(!siblings.isEmpty()){
             position = siblings.get(siblings.size()-1)
                     .getPosition()
-                    .add(BigInteger.valueOf(1000));
+                    .add(BigInteger.valueOf(10000));
         }
         block.setPosition(position);
         
