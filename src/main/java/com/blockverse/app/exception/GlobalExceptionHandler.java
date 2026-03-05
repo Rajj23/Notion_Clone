@@ -12,60 +12,70 @@ import java.time.LocalDateTime;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    
+
     @ExceptionHandler(InsufficientPermissionException.class)
-    public ResponseEntity<ErrorResponse> handleInsufficientPermission(InsufficientPermissionException ex){
+    public ResponseEntity<ErrorResponse> handleInsufficientPermission(InsufficientPermissionException ex) {
         return buildError(HttpStatus.FORBIDDEN, ex.getMessage());
     }
-    
+
     @ExceptionHandler(WorkSpaceNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleWorkspaceNotFound(WorkSpaceNotFoundException ex){
+    public ResponseEntity<ErrorResponse> handleWorkspaceNotFound(WorkSpaceNotFoundException ex) {
         return buildError(HttpStatus.NOT_FOUND, ex.getMessage());
     }
-    
+
     @ExceptionHandler(NotWorkSpaceMemberException.class)
-    public ResponseEntity<ErrorResponse> handleNotWorkSpaceMember(NotWorkSpaceMemberException ex){
+    public ResponseEntity<ErrorResponse> handleNotWorkSpaceMember(NotWorkSpaceMemberException ex) {
         return buildError(HttpStatus.FORBIDDEN, ex.getMessage());
     }
-    
+
     @ExceptionHandler(UserNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleUserNotFound(UserNotFoundException ex){
+    public ResponseEntity<ErrorResponse> handleUserNotFound(UserNotFoundException ex) {
         return buildError(HttpStatus.NOT_FOUND, ex.getMessage());
     }
-    
+
     @ExceptionHandler(ActiveMemberException.class)
-    public ResponseEntity<ErrorResponse> handleActiveMember(ActiveMemberException ex){
+    public ResponseEntity<ErrorResponse> handleActiveMember(ActiveMemberException ex) {
         return buildError(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
-    
+
     @ExceptionHandler(OwnerLevelException.class)
-    public ResponseEntity<ErrorResponse> handleOwnerLevel(OwnerLevelException ex){
+    public ResponseEntity<ErrorResponse> handleOwnerLevel(OwnerLevelException ex) {
         return buildError(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
-    
+
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGenericException(Exception ex){
+    public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
         return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
     }
-    
+
     @ExceptionHandler(EmailAlreadyExistException.class)
-    public ResponseEntity<ErrorResponse> handleEmailAlreadyExist(EmailAlreadyExistException ex){
+    public ResponseEntity<ErrorResponse> handleEmailAlreadyExist(EmailAlreadyExistException ex) {
         return buildError(HttpStatus.CONFLICT, ex.getMessage());
     }
-    
+
     @ExceptionHandler(InvalidTokenException.class)
-    public ResponseEntity<ErrorResponse> handleInvalidToken(InvalidTokenException ex){
+    public ResponseEntity<ErrorResponse> handleInvalidToken(InvalidTokenException ex) {
         return buildError(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }
-    
+
     @ExceptionHandler(DocumentNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleDocumentNotFound(DocumentNotFoundException ex){
+    public ResponseEntity<ErrorResponse> handleDocumentNotFound(DocumentNotFoundException ex) {
         return buildError(HttpStatus.NOT_FOUND, ex.getMessage());
     }
-    
+
     @ExceptionHandler(BlockNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleBlockNotFound(BlockNotFoundException ex){
+    public ResponseEntity<ErrorResponse> handleBlockNotFound(BlockNotFoundException ex) {
         return buildError(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    @ExceptionHandler(BlockLevelException.class)
+    public ResponseEntity<ErrorResponse> handleBlockLevel(BlockLevelException ex) {
+        return buildError(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(DocumentLevelException.class)
+    public ResponseEntity<ErrorResponse> handleDocumentLevel(DocumentLevelException ex) {
+        return buildError(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -80,15 +90,13 @@ public class GlobalExceptionHandler {
         return buildError(HttpStatus.BAD_REQUEST, errorMessage);
     }
 
-    
-    private ResponseEntity<ErrorResponse> buildError(HttpStatus status, String message){
+    private ResponseEntity<ErrorResponse> buildError(HttpStatus status, String message) {
         ErrorResponse error = new ErrorResponse(
                 status.value(),
                 status.getReasonPhrase(),
                 message,
-                LocalDateTime.now()
-        );
-        
+                LocalDateTime.now());
+
         return new ResponseEntity<>(error, status);
     }
 }
