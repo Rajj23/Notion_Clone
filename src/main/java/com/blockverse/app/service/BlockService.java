@@ -2,6 +2,7 @@ package com.blockverse.app.service;
 
 import com.blockverse.app.dto.block.*;
 import com.blockverse.app.entity.*;
+import com.blockverse.app.exception.BlockLevelException;
 import com.blockverse.app.exception.BlockNotFoundException;
 import com.blockverse.app.exception.DocumentNotFoundException;
 import com.blockverse.app.exception.NotWorkSpaceMemberException;
@@ -74,7 +75,7 @@ public class BlockService {
         if(request.getParentId() != null){
             parent = getBlockOrThrow(request.getParentId());
             if(parent.getDocument().getId() != documentId){
-                throw new RuntimeException("Parent block must belong to the same document");
+                throw new BlockLevelException("Parent block must belong to the same document");
             }
             block.setParent(parent);
         }
@@ -188,7 +189,7 @@ public class BlockService {
                 throw new RuntimeException("New parent must belong to the same document");
             }
             if(isDescendant(block, newParent)){
-                throw new RuntimeException("Cannot move a block under its own descendant");
+                throw new BlockLevelException("Cannot move a block under its own descendant");
             }
         }
         
