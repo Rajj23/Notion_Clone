@@ -88,7 +88,7 @@ class BlockServiceTest {
     class CreateBlockTests {
 
         @Test
-        @DisplayName("should create a root block with default position 10000")
+        @DisplayName("should create a root block with default position 10000 and correct document association")
         void createRootBlock_success() {
             stubAuthenticatedMember();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
@@ -107,11 +107,17 @@ class BlockServiceTest {
             assertEquals(BlockType.PARAGRAPH, response.getType());
             assertEquals("New content", response.getContent());
             assertEquals(BigInteger.valueOf(10000), response.getPosition());
-            verify(blockRepo).save(any(Block.class));
+            assertNull(response.getParentId());
+            assertEquals(1, response.getDocumentId());
+            verify(blockRepo).save(argThat(block -> block.getDocument().equals(testDocument) &&
+                    block.getParent() == null &&
+                    "New content".equals(block.getContent()) &&
+                    block.getType() == BlockType.PARAGRAPH &&
+                    block.getPosition().equals(BigInteger.valueOf(10000))));
         }
 
         @Test
-        @DisplayName("should create a child block under a parent")
+        @DisplayName("should create a child block linked to its parent within the same document")
         void createChildBlock_success() {
             stubAuthenticatedMember();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
@@ -134,10 +140,14 @@ class BlockServiceTest {
             assertNotNull(response);
             assertEquals(5, response.getParentId());
             assertEquals(BlockType.BULLET, response.getType());
+            assertEquals("Child", response.getContent());
+            verify(blockRepo).save(argThat(block -> block.getParent() != null &&
+                    block.getParent().getId() == 5 &&
+                    block.getDocument().equals(testDocument)));
         }
 
         @Test
-        @DisplayName("should calculate position after last sibling")
+        @DisplayName("should calculate position as lastSibling + 10000")
         void createBlock_positionAfterLastSibling() {
             stubAuthenticatedMember();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
@@ -153,10 +163,11 @@ class BlockServiceTest {
             BlockResponse response = blockService.createBlock(1, request);
 
             assertEquals(BigInteger.valueOf(40000), response.getPosition());
+            verify(blockRepo).save(argThat(block -> block.getPosition().equals(BigInteger.valueOf(40000))));
         }
 
         @Test
-        @DisplayName("should throw BlockLevelException when parent belongs to different document")
+        @DisplayName("must reject parent block from a different document")
         void createBlock_parentFromDifferentDocument() {
             stubAuthenticatedMember();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
@@ -169,10 +180,11 @@ class BlockServiceTest {
             CreateBlockRequest request = new CreateBlockRequest(7, BlockType.PARAGRAPH, "Bad");
 
             assertThrows(BlockLevelException.class, () -> blockService.createBlock(1, request));
+            verify(blockRepo, never()).save(any());
         }
 
         @Test
-        @DisplayName("should throw DocumentNotFoundException when document does not exist")
+        @DisplayName("must reject when document does not exist")
         void createBlock_documentNotFound() {
             when(securityUtil.getLoggedInUser()).thenReturn(testUser);
             when(documentRepo.findById(999)).thenReturn(Optional.empty());
@@ -180,10 +192,11 @@ class BlockServiceTest {
             CreateBlockRequest request = new CreateBlockRequest(null, BlockType.PARAGRAPH, "x");
 
             assertThrows(DocumentNotFoundException.class, () -> blockService.createBlock(999, request));
+            verify(blockRepo, never()).save(any());
         }
 
         @Test
-        @DisplayName("should throw NotWorkSpaceMemberException when user is not a workspace member")
+        @DisplayName("must reject non-workspace-member — no data should be saved")
         void createBlock_nonMember() {
             stubAuthenticatedNonMember();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
@@ -204,7 +217,7 @@ class BlockServiceTest {
     class GetBlocksForDocumentTests {
 
         @Test
-        @DisplayName("should build hierarchical tree from flat block list")
+        @DisplayName("should build correct hierarchical tree — children nested under parents")
         void getBlocks_buildsTree() {
             stubAuthenticatedMember();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
@@ -221,10 +234,12 @@ class BlockServiceTest {
 
             List<BlockResponse> result = blockService.getBlocksForDocument(1);
 
-            assertEquals(1, result.size());
+            assertEquals(1, result.size(), "Only root blocks should be at top level");
             assertEquals("Root", result.get(0).getContent());
-            assertEquals(1, result.get(0).getChildren().size());
+            assertEquals(BlockType.HEADING1, result.get(0).getType());
+            assertEquals(1, result.get(0).getChildren().size(), "Root should have 1 child");
             assertEquals("Child", result.get(0).getChildren().get(0).getContent());
+            assertNull(result.get(0).getParentId(), "Root block should have null parent");
         }
 
         @Test
@@ -241,7 +256,7 @@ class BlockServiceTest {
         }
 
         @Test
-        @DisplayName("should throw NotWorkSpaceMemberException when user is not a member")
+        @DisplayName("must reject non-workspace-member")
         void getBlocks_nonMember() {
             stubAuthenticatedNonMember();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
@@ -260,7 +275,7 @@ class BlockServiceTest {
     class UpdateBlockTests {
 
         @Test
-        @DisplayName("should update block content and type")
+        @DisplayName("should mutate block content and type on the entity, then persist")
         void updateBlock_success() {
             stubAuthenticatedMember();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
@@ -272,11 +287,14 @@ class BlockServiceTest {
 
             assertEquals(BlockType.HEADING2, response.getType());
             assertEquals("Updated", response.getContent());
+
+            assertEquals(BlockType.HEADING2, testBlock.getType(), "Entity type should be mutated");
+            assertEquals("Updated", testBlock.getContent(), "Entity content should be mutated");
             verify(blockRepo).save(testBlock);
         }
 
         @Test
-        @DisplayName("should throw BlockNotFoundException when block does not exist")
+        @DisplayName("must reject when block does not exist")
         void updateBlock_notFound() {
             when(securityUtil.getLoggedInUser()).thenReturn(testUser);
             when(blockRepo.findById(999)).thenReturn(Optional.empty());
@@ -288,7 +306,7 @@ class BlockServiceTest {
         }
 
         @Test
-        @DisplayName("should throw NotWorkSpaceMemberException when user is not a member")
+        @DisplayName("must reject non-workspace-member — no data should be saved")
         void updateBlock_nonMember() {
             stubAuthenticatedNonMember();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
@@ -299,6 +317,8 @@ class BlockServiceTest {
             assertThrows(NotWorkSpaceMemberException.class,
                     () -> blockService.updateBlock(1, request));
             verify(blockRepo, never()).save(any());
+
+            assertEquals("Hello World", testBlock.getContent(), "Entity should not be modified by non-member");
         }
     }
 
@@ -311,20 +331,22 @@ class BlockServiceTest {
     class DeleteBlockTests {
 
         @Test
-        @DisplayName("should soft-delete block by setting deleted flag to true")
+        @DisplayName("should soft-delete by setting deleted=true on the entity and persisting")
         void deleteBlock_success() {
             stubAuthenticatedMember();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
             when(blockRepo.save(any(Block.class))).thenAnswer(inv -> inv.getArgument(0));
 
+            assertFalse(testBlock.isDeleted(), "Block should not be deleted before operation");
+
             blockService.deleteBlock(1);
 
-            assertTrue(testBlock.isDeleted());
+            assertTrue(testBlock.isDeleted(), "Block entity must have deleted=true after soft delete");
             verify(blockRepo).save(testBlock);
         }
 
         @Test
-        @DisplayName("should throw BlockNotFoundException when block does not exist")
+        @DisplayName("must reject when block does not exist")
         void deleteBlock_notFound() {
             when(securityUtil.getLoggedInUser()).thenReturn(testUser);
             when(blockRepo.findById(999)).thenReturn(Optional.empty());
@@ -333,13 +355,14 @@ class BlockServiceTest {
         }
 
         @Test
-        @DisplayName("should throw NotWorkSpaceMemberException when user is not a member")
+        @DisplayName("must reject non-workspace-member — block should remain undeleted")
         void deleteBlock_nonMember() {
             stubAuthenticatedNonMember();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
 
             assertThrows(NotWorkSpaceMemberException.class, () -> blockService.deleteBlock(1));
             verify(blockRepo, never()).save(any());
+            assertFalse(testBlock.isDeleted(), "Block must remain undeleted when non-member attempts deletion");
         }
     }
 
@@ -352,7 +375,7 @@ class BlockServiceTest {
     class ReorderBlockTests {
 
         @Test
-        @DisplayName("should update block position")
+        @DisplayName("should update block position on the entity and persist")
         void reorderBlock_success() {
             stubAuthenticatedMember();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
@@ -364,20 +387,26 @@ class BlockServiceTest {
             BlockResponse response = blockService.reorderBlock(1, request);
 
             assertEquals(BigInteger.valueOf(50000), response.getPosition());
+            assertEquals(BigInteger.valueOf(50000), testBlock.getPosition(),
+                    "Entity position must be updated");
             verify(blockRepo).save(testBlock);
         }
 
         @Test
-        @DisplayName("should throw NotWorkSpaceMemberException when user is not a member")
+        @DisplayName("must reject non-workspace-member — position should not change")
         void reorderBlock_nonMember() {
             stubAuthenticatedNonMember();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
+
+            BigInteger originalPos = testBlock.getPosition();
 
             ReorderBlockRequest request = new ReorderBlockRequest();
             request.setNewPosition(BigInteger.valueOf(50000));
 
             assertThrows(NotWorkSpaceMemberException.class,
                     () -> blockService.reorderBlock(1, request));
+            assertEquals(originalPos, testBlock.getPosition(),
+                    "Position must remain unchanged for non-member");
         }
     }
 
@@ -390,7 +419,7 @@ class BlockServiceTest {
     class GetChildrenTests {
 
         @Test
-        @DisplayName("should return list of child blocks mapped to responses")
+        @DisplayName("should return ordered child list with correct content and types")
         void getChildren_success() {
             stubAuthenticatedMember();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
@@ -399,7 +428,7 @@ class BlockServiceTest {
                     .type(BlockType.BULLET).content("Item 1")
                     .position(BigInteger.valueOf(10000)).children(new ArrayList<>()).build();
             Block child2 = Block.builder().id(11).document(testDocument).parent(testBlock)
-                    .type(BlockType.BULLET).content("Item 2")
+                    .type(BlockType.NUMBERED).content("Item 2")
                     .position(BigInteger.valueOf(20000)).children(new ArrayList<>()).build();
 
             when(blockRepo.findByParentAndDeletedFalseOrderByPositionAsc(testBlock))
@@ -409,7 +438,9 @@ class BlockServiceTest {
 
             assertEquals(2, result.size());
             assertEquals("Item 1", result.get(0).getContent());
+            assertEquals(BlockType.BULLET, result.get(0).getType());
             assertEquals("Item 2", result.get(1).getContent());
+            assertEquals(BlockType.NUMBERED, result.get(1).getType());
         }
 
         @Test
@@ -426,7 +457,7 @@ class BlockServiceTest {
         }
 
         @Test
-        @DisplayName("should throw NotWorkSpaceMemberException when user is not a member")
+        @DisplayName("must reject non-workspace-member")
         void getChildren_nonMember() {
             stubAuthenticatedNonMember();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
@@ -445,7 +476,7 @@ class BlockServiceTest {
     class MoveBlockTests {
 
         @Test
-        @DisplayName("should move block to a new parent within the same document")
+        @DisplayName("should move block to new parent — entity must have updated parent and position")
         void moveBlock_toNewParent() {
             stubAuthenticatedMember();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
@@ -464,10 +495,14 @@ class BlockServiceTest {
 
             assertEquals(50, response.getParentId());
             assertEquals(BigInteger.valueOf(20000), response.getPosition());
+
+            assertEquals(newParent, testBlock.getParent(), "Entity parent must be updated");
+            assertEquals(BigInteger.valueOf(20000), testBlock.getPosition(), "Entity position must be updated");
+            verify(blockRepo).save(testBlock);
         }
 
         @Test
-        @DisplayName("should move block to root level when newParentId is null")
+        @DisplayName("should move block to root level — parent set to null")
         void moveBlock_toRoot() {
             stubAuthenticatedMember();
             Block blockWithParent = Block.builder().id(1).document(testDocument)
@@ -477,6 +512,8 @@ class BlockServiceTest {
             when(blockRepo.findById(1)).thenReturn(Optional.of(blockWithParent));
             when(blockRepo.save(any(Block.class))).thenAnswer(inv -> inv.getArgument(0));
 
+            assertNotNull(blockWithParent.getParent(), "Block should have a parent before move");
+
             MoveBlockRequest request = new MoveBlockRequest();
             request.setNewParentId(null);
             request.setNewPosition(BigInteger.valueOf(500));
@@ -485,10 +522,11 @@ class BlockServiceTest {
 
             assertNull(response.getParentId());
             assertEquals(BigInteger.valueOf(500), response.getPosition());
+            assertNull(blockWithParent.getParent(), "Entity parent must be null after moving to root");
         }
 
         @Test
-        @DisplayName("should throw DocumentLevelException when new parent is in a different document")
+        @DisplayName("must reject moving block to a parent in a different document")
         void moveBlock_crossDocument() {
             stubAuthenticatedMember();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
@@ -504,10 +542,11 @@ class BlockServiceTest {
             request.setNewPosition(BigInteger.valueOf(10000));
 
             assertThrows(DocumentLevelException.class, () -> blockService.moveBlock(1, request));
+            verify(blockRepo, never()).save(any());
         }
 
         @Test
-        @DisplayName("should throw BlockLevelException when moving block under its own descendant")
+        @DisplayName("must reject moving block under its own descendant — prevents cycle")
         void moveBlock_descendantCycle() {
             stubAuthenticatedMember();
 
@@ -529,13 +568,17 @@ class BlockServiceTest {
             request.setNewPosition(BigInteger.valueOf(10000));
 
             assertThrows(BlockLevelException.class, () -> blockService.moveBlock(1, request));
+            verify(blockRepo, never()).save(any());
         }
 
         @Test
-        @DisplayName("should throw NotWorkSpaceMemberException when user is not a member")
+        @DisplayName("must reject non-workspace-member — no data should be saved")
         void moveBlock_nonMember() {
             stubAuthenticatedNonMember();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
+
+            Block originalParent = testBlock.getParent();
+            BigInteger originalPos = testBlock.getPosition();
 
             MoveBlockRequest request = new MoveBlockRequest();
             request.setNewParentId(null);
@@ -544,6 +587,8 @@ class BlockServiceTest {
             assertThrows(NotWorkSpaceMemberException.class,
                     () -> blockService.moveBlock(1, request));
             verify(blockRepo, never()).save(any());
+            assertEquals(originalParent, testBlock.getParent(), "Parent must not change for non-member");
+            assertEquals(originalPos, testBlock.getPosition(), "Position must not change for non-member");
         }
     }
 }
