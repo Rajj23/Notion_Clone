@@ -9,6 +9,7 @@ import com.blockverse.app.entity.User;
 import com.blockverse.app.entity.WorkSpace;
 import com.blockverse.app.entity.WorkSpaceMember;
 import com.blockverse.app.enums.WorkSpaceRole;
+import com.blockverse.app.exception.DocumentNotFoundException;
 import com.blockverse.app.exception.InsufficientPermissionException;
 import com.blockverse.app.exception.WorkSpaceNotFoundException;
 import com.blockverse.app.mapper.DocumentMapper;
@@ -41,7 +42,7 @@ public class DocumentService {
     
     private Document getDocumentOrThrow(int documentId) {
         return documentRepo.findById(documentId)
-                .orElseThrow(() -> new RuntimeException("Document not found"));
+                .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
     }
 
     private WorkSpaceMember getMembershipOrThrow(User user, WorkSpace workSpace) {
