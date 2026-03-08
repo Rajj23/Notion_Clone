@@ -11,11 +11,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AddMemberRequest {
-    
+
     @NotNull(message = "Email cannot be null")
-    @Email
+    @Email(message = "Email must be valid")
+    @jakarta.validation.constraints.NotBlank(message = "Email cannot be empty")
     private String email;
-    
+
     @NotNull(message = "Role cannot be null")
     private WorkSpaceRole role;
 }

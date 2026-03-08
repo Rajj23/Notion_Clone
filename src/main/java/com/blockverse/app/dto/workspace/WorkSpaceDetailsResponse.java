@@ -14,7 +14,7 @@ public class WorkSpaceDetailsResponse {
     private int id;
     private String name;
     private WorkSpaceType workSpaceType;;
-    private OwnerInfo ownerInfo; 
-    private int memberCount;
+    private OwnerInfo ownerInfo;
+    private long memberCount;
     private WorkSpaceRole userRoleInWorkSpace;
 }

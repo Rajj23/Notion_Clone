@@ -29,7 +29,7 @@ import java.util.List;
 @Transactional
 public class DocumentService {
 
-    private DocumentMapper documentMapper;
+    private final DocumentMapper documentMapper;
     private final DocumentRepo documentRepo;
     private final WorkSpaceRepo workSpaceRepo;
     private final WorkSpaceMemberRepo workSpaceMemberRepo;
@@ -48,7 +48,7 @@ public class DocumentService {
 
     private WorkSpaceMember getMembershipOrThrow(User user, WorkSpace workSpace) {
         return workSpaceMemberRepo.findByUserAndWorkSpaceAndDeletedAtIsNull(user, workSpace)
-                .orElseThrow(() -> new WorkSpaceNotFoundException("User is not a member of this workspace"));
+                .orElseThrow(() -> new InsufficientPermissionException("User is not a member of this workspace"));
     }
 
     public DocumentResponse createDocument(int workspaceId, CreateDocumentRequest request) {
