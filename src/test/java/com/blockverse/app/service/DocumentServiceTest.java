@@ -68,7 +68,6 @@ class DocumentServiceTest {
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(documentService, "documentMapper", documentMapper);
         testUser = User.builder().id(1).name("Test User").email("test@mail.com").build();
         testWorkSpace = WorkSpace.builder().id(1).name("Test Workspace").build();
         ownerMember = WorkSpaceMember.builder().id(1).user(testUser).workSpace(testWorkSpace).role(WorkSpaceRole.OWNER)
@@ -95,7 +94,6 @@ class DocumentServiceTest {
                 .thenReturn(Optional.empty());
     }
 
-    
     // createDocument
 
     @Nested
@@ -139,13 +137,13 @@ class DocumentServiceTest {
             stubAuthenticatedNonMember();
             when(workSpaceRepo.findById(1)).thenReturn(Optional.of(testWorkSpace));
 
-            assertThrows(WorkSpaceNotFoundException.class,
+            assertThrows(InsufficientPermissionException.class,
                     () -> documentService.createDocument(1, new CreateDocumentRequest("x")));
             verify(documentRepo, never()).save(any());
         }
     }
 
-    // getDocument   
+    // getDocument
 
     @Nested
     @DisplayName("getDocument")
@@ -181,7 +179,7 @@ class DocumentServiceTest {
             stubAuthenticatedNonMember();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
 
-            assertThrows(WorkSpaceNotFoundException.class,
+            assertThrows(InsufficientPermissionException.class,
                     () -> documentService.getDocument(1));
         }
     }
@@ -233,7 +231,7 @@ class DocumentServiceTest {
             stubAuthenticatedNonMember();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
 
-            assertThrows(WorkSpaceNotFoundException.class,
+            assertThrows(InsufficientPermissionException.class,
                     () -> documentService.getDocumentWithBlocks(1));
         }
     }
@@ -287,7 +285,7 @@ class DocumentServiceTest {
             UpdateDocumentRequest request = new UpdateDocumentRequest();
             request.setTitle("x");
 
-            assertThrows(WorkSpaceNotFoundException.class,
+            assertThrows(InsufficientPermissionException.class,
                     () -> documentService.updateDocument(1, request));
             verify(documentRepo, never()).save(any());
         }
@@ -350,7 +348,7 @@ class DocumentServiceTest {
             stubAuthenticatedNonMember();
             when(workSpaceRepo.findById(1)).thenReturn(Optional.of(testWorkSpace));
 
-            assertThrows(WorkSpaceNotFoundException.class,
+            assertThrows(InsufficientPermissionException.class,
                     () -> documentService.getDocumentsByWorkspace(1));
         }
     }
@@ -415,7 +413,7 @@ class DocumentServiceTest {
             stubAuthenticatedNonMember();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
 
-            assertThrows(WorkSpaceNotFoundException.class,
+            assertThrows(InsufficientPermissionException.class,
                     () -> documentService.archiveDocument(1));
             verify(documentRepo, never()).save(any());
         }
@@ -486,7 +484,7 @@ class DocumentServiceTest {
             stubAuthenticatedNonMember();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
 
-            assertThrows(WorkSpaceNotFoundException.class,
+            assertThrows(InsufficientPermissionException.class,
                     () -> documentService.unarchiveDocument(1));
             verify(documentRepo, never()).save(any());
         }
