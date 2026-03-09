@@ -99,7 +99,7 @@ public class BlockService {
 
         Long serverVersion = document.getVersion() == null ? 0L : document.getVersion();
 
-        if(!serverVersion.equals(requestVersion)){
+        if(!serverVersion.equals(clientVersion)){
             throw new DocumentVersionMismatchException("Document modified by another user");
         }
 
