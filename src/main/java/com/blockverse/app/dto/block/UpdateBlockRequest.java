@@ -11,4 +11,5 @@ import lombok.*;
 public class UpdateBlockRequest {
     private BlockType type;
     private String content;
+    private Long documentVersion;
 }

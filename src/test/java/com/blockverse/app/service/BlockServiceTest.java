@@ -4,10 +4,10 @@ import com.blockverse.app.dto.block.*;
 import com.blockverse.app.entity.*;
 import com.blockverse.app.enums.BlockType;
 import com.blockverse.app.exception.*;
+import com.blockverse.app.repo.BlockChangeLogRepo;
 import com.blockverse.app.repo.BlockRepo;
 import com.blockverse.app.repo.DocumentRepo;
 import com.blockverse.app.repo.WorkSpaceMemberRepo;
-import com.blockverse.app.repo.WorkSpaceRepo;
 import com.blockverse.app.security.SecurityUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,13 +33,13 @@ class BlockServiceTest {
     @Mock
     private DocumentRepo documentRepo;
     @Mock
-    private WorkSpaceRepo workSpaceRepo;
-    @Mock
     private WorkSpaceMemberRepo workSpaceMemberRepo;
     @Mock
     private SecurityUtil securityUtil;
     @Mock
     private BlockRepo blockRepo;
+    @Mock
+    private BlockChangeLogRepo blockChangeLogRepo;
 
     @InjectMocks
     private BlockService blockService;
@@ -79,6 +79,11 @@ class BlockServiceTest {
                 .thenReturn(Optional.empty());
     }
 
+    private void stubChangeLogDependencies() {
+        when(documentRepo.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(blockChangeLogRepo.save(any(BlockChangeLog.class))).thenAnswer(inv -> inv.getArgument(0));
+    }
+
     // ========================================================================
     // createBlock
     // ========================================================================
@@ -91,6 +96,7 @@ class BlockServiceTest {
         @DisplayName("should create a root block with default position 10000 and correct document association")
         void createRootBlock_success() {
             stubAuthenticatedMember();
+            stubChangeLogDependencies();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
             when(blockRepo.findByDocumentAndParentAndDeletedFalseOrderByPositionAsc(testDocument, null))
                     .thenReturn(List.of());
@@ -100,7 +106,7 @@ class BlockServiceTest {
                 return b;
             });
 
-            CreateBlockRequest request = new CreateBlockRequest(null, BlockType.PARAGRAPH, "New content");
+            CreateBlockRequest request = new CreateBlockRequest(null, BlockType.PARAGRAPH, "New content", null);
             BlockResponse response = blockService.createBlock(1, request);
 
             assertNotNull(response);
@@ -120,6 +126,7 @@ class BlockServiceTest {
         @DisplayName("should create a child block linked to its parent within the same document")
         void createChildBlock_success() {
             stubAuthenticatedMember();
+            stubChangeLogDependencies();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
 
             Block parent = Block.builder().id(5).document(testDocument)
@@ -134,7 +141,7 @@ class BlockServiceTest {
                 return b;
             });
 
-            CreateBlockRequest request = new CreateBlockRequest(5, BlockType.BULLET, "Child");
+            CreateBlockRequest request = new CreateBlockRequest(5, BlockType.BULLET, "Child", null);
             BlockResponse response = blockService.createBlock(1, request);
 
             assertNotNull(response);
@@ -150,6 +157,7 @@ class BlockServiceTest {
         @DisplayName("should calculate position as lastSibling + 10000")
         void createBlock_positionAfterLastSibling() {
             stubAuthenticatedMember();
+            stubChangeLogDependencies();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
 
             Block existingSibling = Block.builder().id(20).document(testDocument)
@@ -159,7 +167,7 @@ class BlockServiceTest {
                     .thenReturn(List.of(existingSibling));
             when(blockRepo.save(any(Block.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            CreateBlockRequest request = new CreateBlockRequest(null, BlockType.PARAGRAPH, "After sibling");
+            CreateBlockRequest request = new CreateBlockRequest(null, BlockType.PARAGRAPH, "After sibling", null);
             BlockResponse response = blockService.createBlock(1, request);
 
             assertEquals(BigInteger.valueOf(40000), response.getPosition());
@@ -177,7 +185,7 @@ class BlockServiceTest {
                     .type(BlockType.PARAGRAPH).content("x").children(new ArrayList<>()).build();
             when(blockRepo.findById(7)).thenReturn(Optional.of(parentInOtherDoc));
 
-            CreateBlockRequest request = new CreateBlockRequest(7, BlockType.PARAGRAPH, "Bad");
+            CreateBlockRequest request = new CreateBlockRequest(7, BlockType.PARAGRAPH, "Bad", null);
 
             assertThrows(BlockLevelException.class, () -> blockService.createBlock(1, request));
             verify(blockRepo, never()).save(any());
@@ -189,7 +197,7 @@ class BlockServiceTest {
             when(securityUtil.getLoggedInUser()).thenReturn(testUser);
             when(documentRepo.findById(999)).thenReturn(Optional.empty());
 
-            CreateBlockRequest request = new CreateBlockRequest(null, BlockType.PARAGRAPH, "x");
+            CreateBlockRequest request = new CreateBlockRequest(null, BlockType.PARAGRAPH, "x", null);
 
             assertThrows(DocumentNotFoundException.class, () -> blockService.createBlock(999, request));
             verify(blockRepo, never()).save(any());
@@ -201,10 +209,48 @@ class BlockServiceTest {
             stubAuthenticatedNonMember();
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
 
-            CreateBlockRequest request = new CreateBlockRequest(null, BlockType.PARAGRAPH, "x");
+            CreateBlockRequest request = new CreateBlockRequest(null, BlockType.PARAGRAPH, "x", null);
 
             assertThrows(NotWorkSpaceMemberException.class, () -> blockService.createBlock(1, request));
             verify(blockRepo, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("must reject when client document version is stale — conflict detected")
+        void createBlock_versionConflict() {
+            stubAuthenticatedMember();
+            testDocument.setVersion(5L);
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+            when(blockRepo.findByDocumentAndParentAndDeletedFalseOrderByPositionAsc(testDocument, null))
+                    .thenReturn(List.of());
+
+            CreateBlockRequest request = new CreateBlockRequest(null, BlockType.PARAGRAPH, "x", 3L);
+
+            assertThrows(DocumentVersionMismatchException.class, () -> blockService.createBlock(1, request));
+            verify(blockRepo, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("should create block when client version matches server version exactly")
+        void createBlock_correctVersion() {
+            stubAuthenticatedMember();
+            stubChangeLogDependencies();
+            testDocument.setVersion(3L);
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+            when(blockRepo.findByDocumentAndParentAndDeletedFalseOrderByPositionAsc(testDocument, null))
+                    .thenReturn(List.of());
+            when(blockRepo.save(any(Block.class))).thenAnswer(inv -> {
+                Block b = inv.getArgument(0);
+                b.setId(10);
+                return b;
+            });
+
+            CreateBlockRequest request = new CreateBlockRequest(null, BlockType.PARAGRAPH, "Versioned", 3L);
+            BlockResponse response = blockService.createBlock(1, request);
+
+            assertNotNull(response);
+            assertEquals("Versioned", response.getContent());
+            verify(blockRepo).save(any(Block.class));
         }
     }
 
@@ -235,11 +281,11 @@ class BlockServiceTest {
             List<BlockResponse> result = blockService.getBlocksForDocument(1);
 
             assertEquals(1, result.size(), "Only root blocks should be at top level");
-            assertEquals("Root", result.get(0).getContent());
-            assertEquals(BlockType.HEADING1, result.get(0).getType());
-            assertEquals(1, result.get(0).getChildren().size(), "Root should have 1 child");
-            assertEquals("Child", result.get(0).getChildren().get(0).getContent());
-            assertNull(result.get(0).getParentId(), "Root block should have null parent");
+            assertEquals("Root", result.getFirst().getContent());
+            assertEquals(BlockType.HEADING1, result.getFirst().getType());
+            assertEquals(1, result.getFirst().getChildren().size(), "Root should have 1 child");
+            assertEquals("Child", result.getFirst().getChildren().getFirst().getContent());
+            assertNull(result.getFirst().getParentId(), "Root block should have null parent");
         }
 
         @Test
@@ -278,6 +324,7 @@ class BlockServiceTest {
         @DisplayName("should mutate block content and type on the entity, then persist")
         void updateBlock_success() {
             stubAuthenticatedMember();
+            stubChangeLogDependencies();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
             when(blockRepo.save(any(Block.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -320,6 +367,39 @@ class BlockServiceTest {
 
             assertEquals("Hello World", testBlock.getContent(), "Entity should not be modified by non-member");
         }
+
+        @Test
+        @DisplayName("must reject when client document version is stale — conflict detected")
+        void updateBlock_versionConflict() {
+            stubAuthenticatedMember();
+            testDocument.setVersion(5L);
+            when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
+
+            UpdateBlockRequest request = UpdateBlockRequest.builder()
+                    .type(BlockType.PARAGRAPH).content("x").documentVersion(3L).build();
+
+            assertThrows(DocumentVersionMismatchException.class,
+                    () -> blockService.updateBlock(1, request));
+            verify(blockRepo, never()).save(any());
+            assertEquals("Hello World", testBlock.getContent(), "Entity should not be modified on version conflict");
+        }
+
+        @Test
+        @DisplayName("should update when client version matches server version exactly")
+        void updateBlock_correctVersion() {
+            stubAuthenticatedMember();
+            stubChangeLogDependencies();
+            testDocument.setVersion(3L);
+            when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
+            when(blockRepo.save(any(Block.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            UpdateBlockRequest request = UpdateBlockRequest.builder()
+                    .type(BlockType.HEADING2).content("Updated").documentVersion(3L).build();
+            BlockResponse response = blockService.updateBlock(1, request);
+
+            assertEquals("Updated", response.getContent());
+            verify(blockRepo).save(testBlock);
+        }
     }
 
     // ========================================================================
@@ -334,12 +414,14 @@ class BlockServiceTest {
         @DisplayName("should soft-delete by setting deleted=true on the entity and persisting")
         void deleteBlock_success() {
             stubAuthenticatedMember();
+            stubChangeLogDependencies();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
             when(blockRepo.save(any(Block.class))).thenAnswer(inv -> inv.getArgument(0));
 
             assertFalse(testBlock.isDeleted(), "Block should not be deleted before operation");
 
-            blockService.deleteBlock(1);
+            DeleteBlockRequest request = new DeleteBlockRequest(null);
+            blockService.deleteBlock(1, request);
 
             assertTrue(testBlock.isDeleted(), "Block entity must have deleted=true after soft delete");
             verify(blockRepo).save(testBlock);
@@ -351,7 +433,8 @@ class BlockServiceTest {
             when(securityUtil.getLoggedInUser()).thenReturn(testUser);
             when(blockRepo.findById(999)).thenReturn(Optional.empty());
 
-            assertThrows(BlockNotFoundException.class, () -> blockService.deleteBlock(999));
+            DeleteBlockRequest request = new DeleteBlockRequest(null);
+            assertThrows(BlockNotFoundException.class, () -> blockService.deleteBlock(999, request));
         }
 
         @Test
@@ -360,53 +443,40 @@ class BlockServiceTest {
             stubAuthenticatedNonMember();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
 
-            assertThrows(NotWorkSpaceMemberException.class, () -> blockService.deleteBlock(1));
+            DeleteBlockRequest request = new DeleteBlockRequest(null);
+            assertThrows(NotWorkSpaceMemberException.class, () -> blockService.deleteBlock(1, request));
             verify(blockRepo, never()).save(any());
             assertFalse(testBlock.isDeleted(), "Block must remain undeleted when non-member attempts deletion");
         }
-    }
-
-    // ========================================================================
-    // reorderBlock
-    // ========================================================================
-
-    @Nested
-    @DisplayName("reorderBlock")
-    class ReorderBlockTests {
 
         @Test
-        @DisplayName("should update block position on the entity and persist")
-        void reorderBlock_success() {
+        @DisplayName("must reject when client document version is stale — conflict detected")
+        void deleteBlock_versionConflict() {
             stubAuthenticatedMember();
+            testDocument.setVersion(5L);
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
-            when(blockRepo.save(any(Block.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            ReorderBlockRequest request = new ReorderBlockRequest();
-            request.setNewPosition(BigInteger.valueOf(50000));
-
-            BlockResponse response = blockService.reorderBlock(1, request);
-
-            assertEquals(BigInteger.valueOf(50000), response.getPosition());
-            assertEquals(BigInteger.valueOf(50000), testBlock.getPosition(),
-                    "Entity position must be updated");
-            verify(blockRepo).save(testBlock);
+            DeleteBlockRequest request = new DeleteBlockRequest(3L);
+            assertThrows(DocumentVersionMismatchException.class,
+                    () -> blockService.deleteBlock(1, request));
+            verify(blockRepo, never()).save(any());
+            assertFalse(testBlock.isDeleted(), "Block must remain undeleted on version conflict");
         }
 
         @Test
-        @DisplayName("must reject non-workspace-member — position should not change")
-        void reorderBlock_nonMember() {
-            stubAuthenticatedNonMember();
+        @DisplayName("should delete when client version matches server version exactly")
+        void deleteBlock_correctVersion() {
+            stubAuthenticatedMember();
+            stubChangeLogDependencies();
+            testDocument.setVersion(3L);
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
+            when(blockRepo.save(any(Block.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            BigInteger originalPos = testBlock.getPosition();
+            DeleteBlockRequest request = new DeleteBlockRequest(3L);
+            blockService.deleteBlock(1, request);
 
-            ReorderBlockRequest request = new ReorderBlockRequest();
-            request.setNewPosition(BigInteger.valueOf(50000));
-
-            assertThrows(NotWorkSpaceMemberException.class,
-                    () -> blockService.reorderBlock(1, request));
-            assertEquals(originalPos, testBlock.getPosition(),
-                    "Position must remain unchanged for non-member");
+            assertTrue(testBlock.isDeleted(), "Block should be soft-deleted when version matches");
+            verify(blockRepo).save(testBlock);
         }
     }
 
@@ -479,6 +549,7 @@ class BlockServiceTest {
         @DisplayName("should move block to new parent — entity must have updated parent and position")
         void moveBlock_toNewParent() {
             stubAuthenticatedMember();
+            stubChangeLogDependencies();
             when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
 
             Block newParent = Block.builder().id(50).document(testDocument)
@@ -505,6 +576,7 @@ class BlockServiceTest {
         @DisplayName("should move block to root level — parent set to null")
         void moveBlock_toRoot() {
             stubAuthenticatedMember();
+            stubChangeLogDependencies();
             Block blockWithParent = Block.builder().id(1).document(testDocument)
                     .parent(Block.builder().id(99).document(testDocument).children(new ArrayList<>()).build())
                     .type(BlockType.PARAGRAPH).content("Moving to root")
@@ -589,6 +661,45 @@ class BlockServiceTest {
             verify(blockRepo, never()).save(any());
             assertEquals(originalParent, testBlock.getParent(), "Parent must not change for non-member");
             assertEquals(originalPos, testBlock.getPosition(), "Position must not change for non-member");
+        }
+
+        @Test
+        @DisplayName("must reject when client document version is stale — conflict detected")
+        void moveBlock_versionConflict() {
+            stubAuthenticatedMember();
+            testDocument.setVersion(5L);
+            when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
+
+            MoveBlockRequest request = new MoveBlockRequest();
+            request.setNewParentId(null);
+            request.setNewPosition(BigInteger.valueOf(20000));
+            request.setDocumentVersion(3L);
+
+            assertThrows(DocumentVersionMismatchException.class,
+                    () -> blockService.moveBlock(1, request));
+            verify(blockRepo, never()).save(any());
+            assertEquals(BigInteger.valueOf(10000), testBlock.getPosition(),
+                    "Position must not change on version conflict");
+        }
+
+        @Test
+        @DisplayName("should move when client version matches server version exactly")
+        void moveBlock_correctVersion() {
+            stubAuthenticatedMember();
+            stubChangeLogDependencies();
+            testDocument.setVersion(3L);
+            when(blockRepo.findById(1)).thenReturn(Optional.of(testBlock));
+            when(blockRepo.save(any(Block.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            MoveBlockRequest request = new MoveBlockRequest();
+            request.setNewParentId(null);
+            request.setNewPosition(BigInteger.valueOf(20000));
+            request.setDocumentVersion(3L);
+
+            BlockResponse response = blockService.moveBlock(1, request);
+
+            assertEquals(BigInteger.valueOf(20000), response.getPosition());
+            verify(blockRepo).save(testBlock);
         }
     }
 }

@@ -26,19 +26,14 @@ public class BlockController {
     }
     
     @DeleteMapping("/{blockId}")
-    public ResponseEntity<String> deleteBlock(@PathVariable int blockId){
-        blockService.deleteBlock(blockId);
+    public ResponseEntity<String> deleteBlock(@PathVariable int blockId, @RequestBody DeleteBlockRequest request){
+        blockService.deleteBlock(blockId, request);
         return ResponseEntity.ok("Block deleted successfully");
     }
     
     @PutMapping("/{blockId}/move")
     public ResponseEntity<BlockResponse> moveBlock(@PathVariable int blockId, @RequestBody MoveBlockRequest request){
         return ResponseEntity.ok(blockService.moveBlock(blockId, request));
-    }
-    
-    @PutMapping("/{blockId}/reorder")
-    public ResponseEntity<BlockResponse> reorderBlock(@PathVariable int blockId, @RequestBody ReorderBlockRequest request){
-        return ResponseEntity.ok(blockService.reorderBlock(blockId, request));
     }
     
     @GetMapping("/{blockId}/children")

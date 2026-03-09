@@ -63,6 +63,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleInvalidToken(InvalidTokenException ex) {
         return buildError(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }
+    
+    @ExceptionHandler(DocumentVersionMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleDocumentVersionMismatch(DocumentVersionMismatchException ex) {
+        return buildError(HttpStatus.CONFLICT, ex.getMessage());
+    }
 
     @ExceptionHandler(DocumentNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleDocumentNotFound(DocumentNotFoundException ex) {

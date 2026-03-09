@@ -10,4 +10,5 @@ import java.math.BigInteger;
 public class MoveBlockRequest {
     private Integer newParentId;
     private BigInteger newPosition;
+    private Long documentVersion;
 }

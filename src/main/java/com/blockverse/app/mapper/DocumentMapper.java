@@ -16,6 +16,7 @@ public class DocumentMapper {
                 .title(document.getTitle())
                 .workspaceId(document.getWorkSpace().getId())
                 .archived(document.isArchived())
+                .version(document.getVersion())
                 .createdAt(document.getCreatedAt())
                 .build();
     }

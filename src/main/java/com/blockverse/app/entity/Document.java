@@ -14,22 +14,25 @@ import java.time.LocalDateTime;
 @Setter
 @Builder
 public class Document {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
-    
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "workspace_id", nullable = false)
     private WorkSpace workSpace;
-    
+
     @NotNull(message = "Title cannot be null")
     private String title;
     private boolean archived = false;
-    
+
+    @Builder.Default
+    private Long version = 0L;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
-    
+
     @CreationTimestamp
     private LocalDateTime updatedAt;
 }

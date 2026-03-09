@@ -18,6 +18,7 @@ public class DocumentResponse {
     private String title;
     private int workspaceId;
     private boolean archived;
+    private Long version;
     private LocalDateTime createdAt;
 
 }
