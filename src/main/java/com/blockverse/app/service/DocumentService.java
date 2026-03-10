@@ -62,7 +62,7 @@ public class DocumentService {
         Document document = new Document();
         document.setTitle(request.getTitle());
         document.setWorkSpace(workSpace);
-        documentRepo.save(document);
+        document = documentRepo.save(document);
 
         return documentMapper.toResponse(document);
     }
