@@ -63,10 +63,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleInvalidToken(InvalidTokenException ex) {
         return buildError(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }
-    
+
     @ExceptionHandler(DocumentVersionMismatchException.class)
     public ResponseEntity<ErrorResponse> handleDocumentVersionMismatch(DocumentVersionMismatchException ex) {
         return buildError(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleOptimisticLock(
+            org.springframework.orm.ObjectOptimisticLockingFailureException ex) {
+        return buildError(HttpStatus.CONFLICT, "Document modified by another user");
     }
 
     @ExceptionHandler(DocumentNotFoundException.class)
