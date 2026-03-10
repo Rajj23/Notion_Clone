@@ -289,5 +289,69 @@ public class BlockService {
 
         return BlockMapper.toBlockResponse(blockRepo.save(block));
     }
+    
+    @Transactional
+    public void restoreDocumentVersion(int documentId, Long targetVersion){
+        User user = securityUtil.getLoggedInUser();
+        Document document = getDocumentOrThrow(documentId);
+        getMembershipOrThrow(user, document.getWorkSpace());
+        
+        if(document.getVersion() < targetVersion){
+            throw new DocumentLevelException("Target version must be less than or equal to current version");
+        }
+        
+        List<BlockChangeLog> logs = blockChangeLogRepo
+                .findByDocumentAndVersionNumberGreaterThanOrderByVersionNumberDesc(
+                        document, targetVersion
+                );
+        
+        for(BlockChangeLog log : logs){
+            Block block = blockRepo.findById(log.getBlock().getId())
+                    .orElse(null);
+            
+            if(block == null) continue;
+            
+            switch (log.getOperationType()){
+                
+                case CREATE :
+                    block.setDeleted(true);
+                    break;
+                    
+                case DELETE:
+                    block.setDeleted(false);
+                    block.setContent(log.getOldContent());
+                    block.setPosition(log.getOldPosition());
+                    break;
+                    
+                case UPDATE:
+                    block.setContent(log.getOldContent());
+                    break;
+                    
+                case MOVE:
+                    block.setPosition(log.getOldPosition());
+                    
+                    if(log.getOldParentId() != null){
+                        Block parent = blockRepo.findById(log.getOldParentId())
+                                .orElseThrow(() -> new BlockNotFoundException("Parent block not found"));
+                        block.setParent(parent);
+                    }
+                    else{
+                        block.setParent(null);
+                    }
+                    break;
+            }
+            blockRepo.save(block);
+        }
+        document.setVersion(targetVersion);
+        documentRepo.save(document);
+    }
+    
+    public List<BlockChangeLog> getDocumentHistory(int documentId){
+        User user = securityUtil.getLoggedInUser();
+        Document document = getDocumentOrThrow(documentId);
+        getMembershipOrThrow(user, document.getWorkSpace());
+
+        return blockChangeLogRepo.findByDocumentOrderByVersionNumberDesc(document);
+    }
 
 }
