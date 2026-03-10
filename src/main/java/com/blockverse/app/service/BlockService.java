@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigInteger;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -55,16 +56,6 @@ public class BlockService {
         return false;
     }
 
-    private Long nextVersion(Document document){
-        long currentVersion = document.getVersion() == null ? 0L : document.getVersion();
-        Long nextVersion = currentVersion + 1;
-
-        document.setVersion(nextVersion);
-        documentRepo.save(document);
-
-        return nextVersion;
-    }
-
     private void logChange(
             Document document,
             Block block,
@@ -76,8 +67,12 @@ public class BlockService {
             Integer oldParentId,
             Integer newParentId,
             User user) {
+
+        document.setUpdatedAt(LocalDateTime.now());
+        Document savedDocument = documentRepo.save(document);
+
         BlockChangeLog log = BlockChangeLog.builder()
-                .document(document)
+                .document(savedDocument)
                 .block(block)
                 .operationType(operationType)
                 .oldContent(oldContent)
@@ -87,7 +82,7 @@ public class BlockService {
                 .oldParentId(oldParentId)
                 .newParentId(newParentId)
                 .changedBy(user)
-                .versionNumber(nextVersion(document))
+                .versionNumber(savedDocument.getVersion())
                 .build();
 
         blockChangeLogRepo.save(log);
