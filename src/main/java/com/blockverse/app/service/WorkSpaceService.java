@@ -6,6 +6,8 @@ import com.blockverse.app.dto.workspace.WorkSpaceDetailsResponse;
 import com.blockverse.app.entity.User;
 import com.blockverse.app.entity.WorkSpace;
 import com.blockverse.app.entity.WorkSpaceMember;
+import com.blockverse.app.enums.AuditActionType;
+import com.blockverse.app.enums.AuditEntityType;
 import com.blockverse.app.exception.InsufficientPermissionException;
 import com.blockverse.app.exception.NotWorkSpaceMemberException;
 import com.blockverse.app.exception.WorkSpaceNotFoundException;
@@ -31,7 +33,7 @@ public class WorkSpaceService {
     private final WorkSpaceRepo workSpaceRepo;
     private final WorkSpaceMemberRepo workSpaceMemberRepo;
     private final SecurityUtil securityUtil;
-    private final UserRepo userRepo;
+    private final AuditLogService auditLogService;
 
     private WorkSpace getWorkSpaceOrThrow(int workspaceId) {
         return workSpaceRepo.findByIdAndDeletedAtIsNull(workspaceId)
@@ -60,6 +62,16 @@ public class WorkSpaceService {
                         .role(OWNER)
                         .build()
         );
+
+        auditLogService.auditLog(
+                workSpace.getId(),
+                currentUser.getId(),
+                AuditEntityType.WORKSPACE,
+                workSpace.getId(),
+                AuditActionType.WORKSPACE_CREATED,
+                "{\"name\":\"" + workSpace.getName() + "\"}"
+        );
+        
         return "WorkSpace created successfully";
     }
     
@@ -74,6 +86,15 @@ public class WorkSpaceService {
         if(membership.getRole() != OWNER){
             throw new InsufficientPermissionException("Only owner can delete the workspace");
         }
+
+        auditLogService.auditLog(
+                workSpace.getId(),
+                currentUser.getId(),
+                AuditEntityType.WORKSPACE,
+                workSpace.getId(),
+                AuditActionType.WORKSPACE_DELETED,
+                "{\"deleted\":\"" + workSpace.getName() + "\"}"
+        );
         
         workSpace.setDeletedAt(LocalDateTime.now());
     }
@@ -103,6 +124,15 @@ public class WorkSpaceService {
         if(membership.getRole() != OWNER && membership.getRole() != ADMIN){
             throw new InsufficientPermissionException("You are not allowed to update the workspace");
         }
+
+        auditLogService.auditLog(
+                workSpace.getId(),
+                currentUser.getId(),
+                AuditEntityType.WORKSPACE,
+                workSpace.getId(),
+                AuditActionType.WORKSPACE_RESTORED,
+                "{\"restored\":\"" + workSpace.getName() + "\"}"
+        );
         
         workSpace.setName(request.getName());
         workSpace.setType(request.getWorkSpaceType());

@@ -2,6 +2,8 @@ package com.blockverse.app.service;
 
 import com.blockverse.app.dto.block.*;
 import com.blockverse.app.entity.*;
+import com.blockverse.app.enums.AuditActionType;
+import com.blockverse.app.enums.AuditEntityType;
 import com.blockverse.app.enums.BlockOperationType;
 import com.blockverse.app.exception.*;
 import com.blockverse.app.mapper.BlockMapper;
@@ -28,6 +30,7 @@ public class BlockService {
     private final SecurityUtil securityUtil;
     private final BlockRepo blockRepo;
     private final BlockChangeLogRepo blockChangeLogRepo;
+    private final AuditLogService auditLogService;
 
     private Document getDocumentOrThrow(int documentId) {
         return documentRepo.findById(documentId)
@@ -136,6 +139,15 @@ public class BlockService {
 
         Block savedBlock = blockRepo.save(block);
 
+        auditLogService.auditLog(document.getWorkSpace().getId(),
+                currentUser.getId(),
+                AuditEntityType.BLOCK,
+                savedBlock.getId(),
+                AuditActionType.BLOCK_CREATED,
+                "{\"documentId\": "+ document.getId() + "}"
+                );
+               
+
         logChange(document, savedBlock,
                 BlockOperationType.CREATE,
                 null,
@@ -207,6 +219,14 @@ public class BlockService {
                 null,
                 currentUser);
 
+        auditLogService.auditLog(document.getWorkSpace().getId(),
+                currentUser.getId(),
+                AuditEntityType.BLOCK,
+                updatedBlock.getId(),
+                AuditActionType.BLOCK_UPDATED,
+                "{\"documentId\": "+ document.getId() + "}"
+        );
+
         return BlockMapper.toBlockResponse(updatedBlock);
     }
 
@@ -233,6 +253,14 @@ public class BlockService {
                 null,
                 null,
                 currentUser);
+
+        auditLogService.auditLog(document.getWorkSpace().getId(),
+                currentUser.getId(),
+                AuditEntityType.BLOCK,
+                block.getId(),
+                AuditActionType.BLOCK_DELETED,
+                "{\"documentId\": "+ document.getId() + "}"
+        );
 
         block.setDeleted(true);
         blockRepo.save(block);
@@ -287,22 +315,30 @@ public class BlockService {
                 newParent != null ? newParent.getId() : null,
                 user);
 
+        auditLogService.auditLog(document.getWorkSpace().getId(),
+                user.getId(),
+                AuditEntityType.BLOCK,
+                block.getId(),
+                AuditActionType.BLOCK_MOVED,
+                "{\"documentId\": "+ document.getId() + "}"
+        );
+
         return BlockMapper.toBlockResponse(blockRepo.save(block));
     }
     
     @Transactional
-    public void restoreDocumentVersion(int documentId, Long targetVersion){
+    public void restoreDocumentVersion(int documentId, RestoreDocumentVersionRequest request){
         User user = securityUtil.getLoggedInUser();
         Document document = getDocumentOrThrow(documentId);
         getMembershipOrThrow(user, document.getWorkSpace());
         
-        if(document.getVersion() < targetVersion){
+        if(document.getVersion() < request.getTargetVersion()){
             throw new DocumentLevelException("Target version must be less than or equal to current version");
         }
         
         List<BlockChangeLog> logs = blockChangeLogRepo
                 .findByDocumentAndVersionNumberGreaterThanOrderByVersionNumberDesc(
-                        document, targetVersion
+                        document, request.getTargetVersion()
                 );
         
         for(BlockChangeLog log : logs){
@@ -342,7 +378,16 @@ public class BlockService {
             }
             blockRepo.save(block);
         }
-        document.setVersion(targetVersion);
+
+        auditLogService.auditLog(document.getWorkSpace().getId(),
+                user.getId(),
+                AuditEntityType.DOCUMENT,
+                document.getId(),
+                AuditActionType.DOCUMENT_RESTORED,
+                "{\"restoredVersion\": "+ request.getTargetVersion() + "}"
+        );
+        
+        document.setVersion(request.getTargetVersion());
         documentRepo.save(document);
     }
     

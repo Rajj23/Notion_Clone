@@ -9,6 +9,8 @@ import com.blockverse.app.entity.Document;
 import com.blockverse.app.entity.User;
 import com.blockverse.app.entity.WorkSpace;
 import com.blockverse.app.entity.WorkSpaceMember;
+import com.blockverse.app.enums.AuditActionType;
+import com.blockverse.app.enums.AuditEntityType;
 import com.blockverse.app.enums.WorkSpaceRole;
 import com.blockverse.app.exception.DocumentNotFoundException;
 import com.blockverse.app.exception.InsufficientPermissionException;
@@ -35,6 +37,7 @@ public class DocumentService {
     private final WorkSpaceMemberRepo workSpaceMemberRepo;
     private final SecurityUtil securityUtil;
     private final BlockService blockService;
+    private final AuditLogService auditLogService;
 
     private WorkSpace getWorkSpaceOrThrow(int workspaceId) {
         return workSpaceRepo.findById(workspaceId)
@@ -63,6 +66,14 @@ public class DocumentService {
         document.setTitle(request.getTitle());
         document.setWorkSpace(workSpace);
         document = documentRepo.save(document);
+
+        auditLogService.auditLog(document.getWorkSpace().getId(),
+                currentUser.getId(),
+                AuditEntityType.DOCUMENT,
+                document.getId(),
+                AuditActionType.DOCUMENT_CREATED,
+                "Document created with title: " + document.getTitle()
+        );
 
         return documentMapper.toResponse(document);
     }
@@ -102,6 +113,15 @@ public class DocumentService {
         document.setTitle(request.getTitle());
         documentRepo.save(document);
 
+        auditLogService.auditLog(
+                document.getWorkSpace().getId(),
+                user.getId(),
+                AuditEntityType.DOCUMENT,
+                document.getId(),
+                AuditActionType.DOCUMENT_UPDATED,
+                "Document updated with new title: " + document.getTitle()
+        );
+
         return documentMapper.toResponse(document);
     }
 
@@ -130,6 +150,13 @@ public class DocumentService {
             throw new InsufficientPermissionException("Only workspace owners or admin can archive documents");
         }
 
+        auditLogService.auditLog(document.getWorkSpace().getId(),
+                user.getId(),
+                AuditEntityType.DOCUMENT,
+                document.getId(),
+                AuditActionType.DOCUMENT_ARCHIVED,
+                "Document archived with title: " + document.getTitle()
+        );
         document.setArchived(true);
         documentRepo.save(document);
     }
@@ -144,7 +171,13 @@ public class DocumentService {
         if (membership.getRole() != WorkSpaceRole.OWNER && membership.getRole() != WorkSpaceRole.ADMIN) {
             throw new InsufficientPermissionException("Only workspace owners or admin can unarchive documents");
         }
-
+        auditLogService.auditLog(document.getWorkSpace().getId(),
+                user.getId(),
+                AuditEntityType.DOCUMENT,
+                document.getId(),
+                AuditActionType.DOCUMENT_UNARCHIVED,
+                "Document unarchived with title: " + document.getTitle()
+        );
         document.setArchived(false);
         documentRepo.save(document);
     }

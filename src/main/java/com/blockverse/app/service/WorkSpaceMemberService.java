@@ -5,6 +5,8 @@ import com.blockverse.app.dto.workspaceMember.ChangeMemberRoleRequest;
 import com.blockverse.app.entity.User;
 import com.blockverse.app.entity.WorkSpace;
 import com.blockverse.app.entity.WorkSpaceMember;
+import com.blockverse.app.enums.AuditActionType;
+import com.blockverse.app.enums.AuditEntityType;
 import com.blockverse.app.enums.WorkSpaceRole;
 import com.blockverse.app.exception.*;
 import com.blockverse.app.repo.UserRepo;
@@ -31,6 +33,7 @@ public class WorkSpaceMemberService {
     private final UserRepo userRepo;
     private final WorkSpaceMemberRepo workSpaceMemberRepo;
     private final SecurityUtil securityUtil;
+    private final AuditLogService auditLogService;
 
     
     private WorkSpace getWorkSpaceOrThrow(int workspaceId) {
@@ -86,6 +89,15 @@ public class WorkSpaceMemberService {
             throw new ActiveMemberException("User already active member of the workspace");
         }
 
+        auditLogService.auditLog(
+                workSpace.getId(),
+                currentUser.getId(),
+                AuditEntityType.USER,
+                workSpace.getId(),
+                AuditActionType.USER_ADDED,
+                "{\"addedUserEmail\":\"" + user.getEmail() + "\", \"role\":\"" + request.getRole() + "\"}"
+        );
+
         workSpaceMemberRepo.save(
                 WorkSpaceMember.builder()
                         .workSpace(workSpace)
@@ -117,6 +129,15 @@ public class WorkSpaceMemberService {
                 && membershipToRemove.getRole() == ADMIN) {
             throw new InsufficientPermissionException("Admin cannot remove another admin");
         }
+
+        auditLogService.auditLog(
+                workSpace.getId(),
+                currentUser.getId(),
+                AuditEntityType.USER,
+                workSpace.getId(),
+                AuditActionType.USER_REMOVED,
+                "{\"removedUserEmail\":\"" + user.getEmail() + "\"}"
+        );
         
         membershipToRemove.setDeletedAt(LocalDateTime.now());
         workSpaceMemberRepo.save(membershipToRemove);
@@ -144,6 +165,15 @@ public class WorkSpaceMemberService {
         if(membershipToChange.getRole() == OWNER) {
             throw new InsufficientPermissionException("Cannot change the role of the owner of the workspace");
         }
+
+        auditLogService.auditLog(
+                workSpace.getId(),
+                currentUser.getId(),
+                AuditEntityType.USER,
+                workSpace.getId(),
+                AuditActionType.ROLE_CHANGED,
+                "{\"changedUserEmail\":\"" + user.getEmail() + "\", \"newRole\":\"" + request.getRole() + "\"}"
+        );
         
         membershipToChange.setRole(request.getRole());
         workSpaceMemberRepo.save(membershipToChange);
@@ -158,6 +188,15 @@ public class WorkSpaceMemberService {
         if(currentUserMembership.getRole() == OWNER){
             throw new OwnerLevelException("Owner cannot leave the workspace. Please transfer ownership or delete the workspace.");
         }
+        
+            auditLogService.auditLog(
+                    workSpace.getId(),
+                    user.getId(),
+                    AuditEntityType.USER,
+                    workSpace.getId(),
+                    AuditActionType.USER_LEFT,
+                    "{\"leftUserEmail\":\"" + user.getEmail() + "\"}"
+            );
         
         workSpaceMemberRepo.delete(currentUserMembership);
     }
@@ -180,6 +219,15 @@ public class WorkSpaceMemberService {
         
         newOwnerMembership.setRole(OWNER);
         currentUserMembership.setRole(ADMIN);
+        
+            auditLogService.auditLog(
+                        workSpace.getId(),
+                        user.getId(),
+                        AuditEntityType.WORKSPACE,
+                        workSpace.getId(),
+                        AuditActionType.WORKSPACE_OWNERSHIP_TRANSFERRED,
+                        "{\"newOwnerEmail\":\"" + newOwnerEmail + "\"}"
+                );
 
         workSpaceMemberRepo.save(newOwnerMembership);
         workSpaceMemberRepo.save(currentUserMembership);
