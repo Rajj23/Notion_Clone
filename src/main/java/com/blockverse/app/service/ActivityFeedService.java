@@ -5,6 +5,7 @@ import com.blockverse.app.dto.activityFeed.ActivityFeedResponse;
 import com.blockverse.app.entity.AuditLog;
 import com.blockverse.app.entity.User;
 import com.blockverse.app.entity.WorkSpace;
+import com.blockverse.app.exception.InsufficientPermissionException;
 import com.blockverse.app.exception.WorkSpaceNotFoundException;
 import com.blockverse.app.mapper.ActivityFeedMapper;
 import com.blockverse.app.repo.AuditLogRepo;
@@ -32,9 +33,11 @@ public class ActivityFeedService {
                 .orElseThrow(() -> new WorkSpaceNotFoundException("Workspace not found"));
         
         workSpaceMemberRepo.findByUserAndWorkSpaceAndDeletedAtIsNull(user, workSpace)
-                .orElseThrow(() -> new WorkSpaceNotFoundException("User is not a member of the workspace"));
-
-        Page<AuditLog> logs = auditLogRepo.findByWorkSpaceIdOrderByCreatedAtDesc(workspaceId, PageRequest.of(request.getPage(), request.getSize()));
+                .orElseThrow(() -> new InsufficientPermissionException("User is not a member of the workspace"));
+        
+        int size = Math.min(request.getSize(), 50);
+        PageRequest pageable = PageRequest.of(request.getPage(), size);
+        Page<AuditLog> logs = auditLogRepo.findByWorkSpace_IdOrderByCreatedAtDesc(workspaceId, pageable);
         
         return logs.stream()
                 .map(ActivityFeedMapper::toResponse)
