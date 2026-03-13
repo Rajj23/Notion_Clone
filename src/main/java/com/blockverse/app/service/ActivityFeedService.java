@@ -1,0 +1,43 @@
+package com.blockverse.app.service;
+
+import com.blockverse.app.dto.activityFeed.ActivityFeedRequest;
+import com.blockverse.app.dto.activityFeed.ActivityFeedResponse;
+import com.blockverse.app.entity.AuditLog;
+import com.blockverse.app.entity.User;
+import com.blockverse.app.entity.WorkSpace;
+import com.blockverse.app.exception.WorkSpaceNotFoundException;
+import com.blockverse.app.mapper.ActivityFeedMapper;
+import com.blockverse.app.repo.AuditLogRepo;
+import com.blockverse.app.repo.WorkSpaceMemberRepo;
+import com.blockverse.app.repo.WorkSpaceRepo;
+import com.blockverse.app.security.SecurityUtil;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class ActivityFeedService {
+    private final AuditLogRepo auditLogRepo;
+    private final SecurityUtil securityUtil;
+    private final WorkSpaceRepo workSpaceRepo;
+    private final WorkSpaceMemberRepo workSpaceMemberRepo;
+    
+    public List<ActivityFeedResponse> getActivityFeed(int workspaceId, ActivityFeedRequest request) {
+        User user = securityUtil.getLoggedInUser();
+        WorkSpace workSpace = workSpaceRepo.findByIdAndDeletedAtIsNull(workspaceId)
+                .orElseThrow(() -> new WorkSpaceNotFoundException("Workspace not found"));
+        
+        workSpaceMemberRepo.findByUserAndWorkSpaceAndDeletedAtIsNull(user, workSpace)
+                .orElseThrow(() -> new WorkSpaceNotFoundException("User is not a member of the workspace"));
+
+        Page<AuditLog> logs = auditLogRepo.findByWorkSpaceIdOrderByCreatedAtDesc(workspaceId, PageRequest.of(request.getPage(), request.getSize()));
+        
+        return logs.stream()
+                .map(ActivityFeedMapper::toResponse)
+                .toList();
+    }
+}
