@@ -12,6 +12,7 @@ import com.blockverse.app.entity.WorkSpaceMember;
 import com.blockverse.app.enums.AuditActionType;
 import com.blockverse.app.enums.AuditEntityType;
 import com.blockverse.app.enums.WorkSpaceRole;
+import com.blockverse.app.exception.DocumentException;
 import com.blockverse.app.exception.DocumentNotFoundException;
 import com.blockverse.app.exception.InsufficientPermissionException;
 import com.blockverse.app.exception.WorkSpaceNotFoundException;
@@ -24,6 +25,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -81,9 +83,10 @@ public class DocumentService {
     public DocumentResponse getDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
 
-        Document document = getDocumentOrThrow(documentId);
+        Document document = documentRepo.findByIdAndArchivedFalseAndDeletedFalse(documentId)
+                .orElseThrow(() -> new DocumentNotFoundException("Document not found or is archived/deleted"));
 
-        WorkSpaceMember membership = getMembershipOrThrow(user, document.getWorkSpace());
+        getMembershipOrThrow(user, document.getWorkSpace());
 
         return documentMapper.toResponse(document);
     }
@@ -93,7 +96,7 @@ public class DocumentService {
 
         Document document = getDocumentOrThrow(documentId);
 
-        WorkSpaceMember membership = getMembershipOrThrow(user, document.getWorkSpace());
+        getMembershipOrThrow(user, document.getWorkSpace());
 
         List<BlockResponse> blocks = blockService.getBlocksForDocument(documentId);
 
@@ -107,9 +110,15 @@ public class DocumentService {
         User user = securityUtil.getLoggedInUser();
 
         Document document = getDocumentOrThrow(documentId);
+        if(document.isArchived() || document.isDeleted()) {
+            throw new DocumentNotFoundException("Document not found or is archived/deleted");
+        }  
 
-        WorkSpaceMember membership = getMembershipOrThrow(user, document.getWorkSpace());
+        getMembershipOrThrow(user, document.getWorkSpace());
 
+        if(request.getTitle() == null || request.getTitle().isBlank()){
+            throw new DocumentException("Title cannot be empty");
+        }
         document.setTitle(request.getTitle());
         documentRepo.save(document);
 
@@ -132,7 +141,7 @@ public class DocumentService {
 
         WorkSpaceMember membership = getMembershipOrThrow(user, workSpace);
 
-        List<Document> documents = documentRepo.findByWorkSpaceAndArchivedFalse(workSpace);
+        List<Document> documents = documentRepo.findByWorkSpaceAndArchivedFalseAndDeletedFalseOrderByCreatedAtDesc(workSpace);
 
         return documents.stream()
                 .map(documentMapper::toResponse)
@@ -142,7 +151,9 @@ public class DocumentService {
     public void archiveDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
 
-        Document document = getDocumentOrThrow(documentId);
+        Document document = documentRepo
+                .findByIdAndArchivedFalseAndDeletedFalse(documentId)
+                .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
 
         WorkSpaceMember membership = getMembershipOrThrow(user, document.getWorkSpace());
 
@@ -164,7 +175,9 @@ public class DocumentService {
     public void unarchiveDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
 
-        Document document = getDocumentOrThrow(documentId);
+        Document document = documentRepo
+                .findByIdAndArchivedTrueAndDeletedFalse(documentId)
+                .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
 
         WorkSpaceMember membership = getMembershipOrThrow(user, document.getWorkSpace());
 
@@ -181,5 +194,97 @@ public class DocumentService {
         document.setArchived(false);
         documentRepo.save(document);
     }
+    
+    public void deleteDocument(int documentId) {
+        User user = securityUtil.getLoggedInUser();
+        Document document = documentRepo
+                .findByIdAndArchivedFalseAndDeletedFalse(documentId)
+                .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
+        WorkSpaceMember membership = getMembershipOrThrow(user, document.getWorkSpace());
 
+        if (membership.getRole() != WorkSpaceRole.OWNER && membership.getRole() != WorkSpaceRole.ADMIN) {
+            throw new InsufficientPermissionException("Only workspace owners or admin can delete documents");
+        }
+
+        if(document.isDeleted()){
+            throw new DocumentException("Document already in trash");
+        }
+
+        auditLogService.auditLog(document.getWorkSpace().getId(),
+                user.getId(),
+                AuditEntityType.DOCUMENT,
+                document.getId(),
+                AuditActionType.DOCUMENT_DELETED,
+                "Document deleted with title: " + document.getTitle()
+        );
+
+        document.setDeleted(true);
+        document.setDeletedAt(LocalDateTime.now());
+        document.setDeletedBy(user.getId());
+        documentRepo.save(document);
+    }
+    
+    public void restoreDeletedDocument(int documentId) {
+        User user = securityUtil.getLoggedInUser();
+        Document document = getDocumentOrThrow(documentId);
+        WorkSpaceMember member = getMembershipOrThrow(user, document.getWorkSpace());
+        
+        if(member.getRole() != WorkSpaceRole.OWNER && member.getRole() != WorkSpaceRole.ADMIN) {
+            throw new InsufficientPermissionException("Only workspace owners or admin can restore documents");
+        }
+        
+        auditLogService.auditLog(document.getWorkSpace().getId(),
+                user.getId(),
+                AuditEntityType.DOCUMENT,
+                document.getId(),
+                AuditActionType.DOCUMENT_RESTORED,
+                "Document restored with title: " + document.getTitle()
+        );
+
+        if(!document.isDeleted()){
+            throw new DocumentException("Document is not in trash");
+        }
+        
+        document.setDeleted(false);
+        document.setDeletedAt(null);
+        document.setDeletedBy(null);
+        documentRepo.save(document);
+    }
+    
+    public void permanentDeleteDocument(int documentId) {
+        User user = securityUtil.getLoggedInUser();
+        Document document = getDocumentOrThrow(documentId);
+        WorkSpaceMember member = getMembershipOrThrow(user, document.getWorkSpace());
+        
+        if(member.getRole() != WorkSpaceRole.OWNER && member.getRole() != WorkSpaceRole.ADMIN) {
+            throw new InsufficientPermissionException("Only workspace owners or admin can permanently delete documents");
+        }
+
+        if(!document.isDeleted()){
+            throw new DocumentException("Document must be in trash before permanent deletion");
+        }
+        
+        auditLogService.auditLog(document.getWorkSpace().getId(),
+                user.getId(),
+                AuditEntityType.DOCUMENT,
+                document.getId(),
+                AuditActionType.DOCUMENT_PERMANENTLY_DELETED,
+                "Document permanently deleted with title: " + document.getTitle()
+        );
+        
+        documentRepo.delete(document);
+    }
+    
+    public List<DocumentResponse> getTrashDocumentsByWorkspace(int workspaceId) {
+        User user = securityUtil.getLoggedInUser();
+        WorkSpace workSpace = getWorkSpaceOrThrow(workspaceId);
+        getMembershipOrThrow(user, workSpace);
+        
+        List<Document> documents = documentRepo.findByWorkSpaceAndArchivedFalseAndDeletedFalseOrderByCreatedAtDesc(workSpace);
+        
+        return documents.stream()
+                .filter(Document::isDeleted)
+                .map(documentMapper::toResponse)
+                .toList();
+    }
 }

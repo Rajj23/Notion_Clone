@@ -51,8 +51,31 @@ public class DocumentController {
     }
     
     @PostMapping("/{documentId}/restore")
-    public ResponseEntity<String> restoreDocument(@PathVariable int documentId){
+    public ResponseEntity<String> restoreArchivedDocument(@PathVariable int documentId){
         documentService.unarchiveDocument(documentId);
         return ResponseEntity.ok("Document restored successfully");
     }  
+    
+    @DeleteMapping("/{documentId}/delete")
+    public ResponseEntity<String> deleteDocument(@PathVariable int documentId){
+        documentService.deleteDocument(documentId);
+        return ResponseEntity.ok("Document deleted successfully");
+    }
+    
+    @DeleteMapping("/{documentId}/restore")
+    public ResponseEntity<String> restoreDeletedDocument(@PathVariable int documentId){
+        documentService.restoreDeletedDocument(documentId);
+        return ResponseEntity.ok("Document restored successfully");
+    }
+    
+    @DeleteMapping("/{documentId}/permanent")
+    public ResponseEntity<String> deleteDocumentPermanently(@PathVariable int documentId){
+        documentService.permanentDeleteDocument(documentId);
+        return ResponseEntity.ok("Document permanently deleted successfully");
+    }
+    
+    @GetMapping("/workspace/{workspaceId}/trash")
+    public ResponseEntity<List<DocumentResponse>> getTrashDocumentsByWorkspace(@PathVariable int workspaceId){
+        return ResponseEntity.ok(documentService.getTrashDocumentsByWorkspace(workspaceId));
+    }
 }

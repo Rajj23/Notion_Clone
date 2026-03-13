@@ -74,6 +74,11 @@ public class GlobalExceptionHandler {
             org.springframework.orm.ObjectOptimisticLockingFailureException ex) {
         return buildError(HttpStatus.CONFLICT, "Document modified by another user");
     }
+    
+    @ExceptionHandler(DocumentException.class)
+    public ResponseEntity<ErrorResponse> handleDocumentException(DocumentException ex){
+        return buildError(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
 
     @ExceptionHandler(DocumentNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleDocumentNotFound(DocumentNotFoundException ex) {

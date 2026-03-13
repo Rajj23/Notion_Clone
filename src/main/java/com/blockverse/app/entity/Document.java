@@ -27,6 +27,10 @@ public class Document {
     @NotNull(message = "Title cannot be null")
     private String title;
     private boolean archived = false;
+    
+    private boolean deleted = false;
+    private LocalDateTime deletedAt;
+    private Integer deletedBy;
 
     @Version
     @Builder.Default

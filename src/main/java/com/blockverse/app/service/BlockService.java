@@ -259,7 +259,7 @@ public class BlockService {
                 AuditEntityType.BLOCK,
                 block.getId(),
                 AuditActionType.BLOCK_DELETED,
-                "{\"documentId\": "+ document.getId() + "}"
+                "{\"title\": "+ document.getTitle() + "}"
         );
 
         block.setDeleted(true);
