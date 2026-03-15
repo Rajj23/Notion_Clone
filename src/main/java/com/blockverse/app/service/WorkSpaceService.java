@@ -46,6 +46,9 @@ public class WorkSpaceService {
     }
 
     public String createWorkSpace(WorkSpaceCreateRequest request){
+        if(request.getName() == null || request.getName().isBlank()){
+            throw new IllegalArgumentException("Workspace name cannot be empty");
+        }
         User currentUser =  securityUtil.getLoggedInUser();
         
         WorkSpace workSpace = workSpaceRepo.save(
@@ -114,6 +117,9 @@ public class WorkSpaceService {
     }
     
     public void updateWorkSpace(int workSpaceId, UpdateWorkSpaceRequest request){
+        if(request.getName() == null || request.getName().isBlank()){
+            throw new IllegalArgumentException("Workspace name cannot be empty");
+        }
         User currentUser =  securityUtil.getLoggedInUser();
         WorkSpace workSpace = getWorkSpaceOrThrow(workSpaceId);
         
@@ -130,8 +136,8 @@ public class WorkSpaceService {
                 currentUser.getId(),
                 AuditEntityType.WORKSPACE,
                 workSpace.getId(),
-                AuditActionType.WORKSPACE_RESTORED,
-                "{\"restored\":\"" + workSpace.getName() + "\"}"
+                AuditActionType.WORKSPACE_UPDATED,
+                "{\"updated\":\"" + workSpace.getName() + "\"}"
         );
         
         workSpace.setName(request.getName());
