@@ -35,8 +35,9 @@ public class ActivityFeedService {
         workSpaceMemberRepo.findByUserAndWorkSpaceAndDeletedAtIsNull(user, workSpace)
                 .orElseThrow(() -> new InsufficientPermissionException("User is not a member of the workspace"));
         
-        int size = Math.min(request.getSize(), 50);
-        PageRequest pageable = PageRequest.of(request.getPage(), size);
+        int page = Math.max(0, request.getPage());
+        int size = Math.max(1, Math.min(request.getSize(), 50));
+        PageRequest pageable = PageRequest.of(page, size);
         Page<AuditLog> logs = auditLogRepo.findByWorkSpace_IdOrderByCreatedAtDesc(workspaceId, pageable);
         
         return logs.stream()
