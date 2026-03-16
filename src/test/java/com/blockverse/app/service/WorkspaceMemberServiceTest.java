@@ -41,6 +41,9 @@ public class WorkspaceMemberServiceTest {
     @Mock
     private SecurityUtil securityUtil;
     
+    @Mock
+    private AuditLogService auditLogService;
+    
     @InjectMocks
     private WorkSpaceMemberService service;
     
