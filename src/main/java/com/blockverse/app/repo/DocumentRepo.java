@@ -12,7 +12,11 @@ public interface DocumentRepo extends JpaRepository<Document, Integer> {
 
     Optional<Document> findByIdAndArchivedFalseAndDeletedFalse(int id);
 
+    Optional<Document> findByIdAndDeletedFalse(int id);
+
     Optional<Document> findByIdAndArchivedTrueAndDeletedFalse(int documentId);
 
     List<Document> findByWorkSpaceAndArchivedFalseAndDeletedFalseOrderByCreatedAtDesc(WorkSpace workSpace);
+
+    List<Document> findByWorkSpaceAndDeletedTrue(WorkSpace workSpace);
 }

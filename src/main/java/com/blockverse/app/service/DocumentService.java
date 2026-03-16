@@ -20,6 +20,8 @@ import com.blockverse.app.mapper.DocumentMapper;
 import com.blockverse.app.repo.DocumentRepo;
 import com.blockverse.app.repo.WorkSpaceMemberRepo;
 import com.blockverse.app.repo.WorkSpaceRepo;
+import com.blockverse.app.repo.BlockRepo;
+import com.blockverse.app.repo.BlockChangeLogRepo;
 import com.blockverse.app.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -40,6 +42,8 @@ public class DocumentService {
     private final SecurityUtil securityUtil;
     private final BlockService blockService;
     private final AuditLogService auditLogService;
+    private final BlockRepo blockRepo;
+    private final BlockChangeLogRepo blockChangeLogRepo;
 
     private WorkSpace getWorkSpaceOrThrow(int workspaceId) {
         return workSpaceRepo.findById(workspaceId)
@@ -65,6 +69,9 @@ public class DocumentService {
         WorkSpaceMember membership = getMembershipOrThrow(currentUser, workSpace);
 
         Document document = new Document();
+        if(request.getTitle() == null || request.getTitle().isBlank()){
+            throw new DocumentException("Title cannot be empty");
+        }
         document.setTitle(request.getTitle());
         document.setWorkSpace(workSpace);
         document = documentRepo.save(document);
@@ -112,7 +119,7 @@ public class DocumentService {
         Document document = getDocumentOrThrow(documentId);
         if(document.isArchived() || document.isDeleted()) {
             throw new DocumentNotFoundException("Document not found or is archived/deleted");
-        }  
+        }
 
         getMembershipOrThrow(user, document.getWorkSpace());
 
@@ -194,11 +201,11 @@ public class DocumentService {
         document.setArchived(false);
         documentRepo.save(document);
     }
-    
+
     public void deleteDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
         Document document = documentRepo
-                .findByIdAndArchivedFalseAndDeletedFalse(documentId)
+                .findByIdAndDeletedFalse(documentId)
                 .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
         WorkSpaceMember membership = getMembershipOrThrow(user, document.getWorkSpace());
 
@@ -223,47 +230,47 @@ public class DocumentService {
         document.setDeletedBy(user.getId());
         documentRepo.save(document);
     }
-    
+
     public void restoreDeletedDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
         Document document = getDocumentOrThrow(documentId);
         WorkSpaceMember member = getMembershipOrThrow(user, document.getWorkSpace());
-        
+
         if(member.getRole() != WorkSpaceRole.OWNER && member.getRole() != WorkSpaceRole.ADMIN) {
             throw new InsufficientPermissionException("Only workspace owners or admin can restore documents");
         }
-        
+
+        if (!document.isDeleted()) {
+            throw new DocumentException("Document is not in trash");
+        }
+
         auditLogService.auditLog(document.getWorkSpace().getId(),
                 user.getId(),
                 AuditEntityType.DOCUMENT,
                 document.getId(),
                 AuditActionType.DOCUMENT_RESTORED,
-                "Document restored with title: " + document.getTitle()
-        );
+                "Document restored with title: " + document.getTitle());
 
-        if(!document.isDeleted()){
-            throw new DocumentException("Document is not in trash");
-        }
-        
         document.setDeleted(false);
         document.setDeletedAt(null);
         document.setDeletedBy(null);
         documentRepo.save(document);
     }
-    
+
     public void permanentDeleteDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
         Document document = getDocumentOrThrow(documentId);
         WorkSpaceMember member = getMembershipOrThrow(user, document.getWorkSpace());
-        
-        if(member.getRole() != WorkSpaceRole.OWNER && member.getRole() != WorkSpaceRole.ADMIN) {
-            throw new InsufficientPermissionException("Only workspace owners or admin can permanently delete documents");
+
+        if (member.getRole() != WorkSpaceRole.OWNER && member.getRole() != WorkSpaceRole.ADMIN) {
+            throw new InsufficientPermissionException(
+                    "Only workspace owners or admin can permanently delete documents");
         }
 
         if(!document.isDeleted()){
             throw new DocumentException("Document must be in trash before permanent deletion");
         }
-        
+
         auditLogService.auditLog(document.getWorkSpace().getId(),
                 user.getId(),
                 AuditEntityType.DOCUMENT,
@@ -271,19 +278,21 @@ public class DocumentService {
                 AuditActionType.DOCUMENT_PERMANENTLY_DELETED,
                 "Document permanently deleted with title: " + document.getTitle()
         );
-        
+
+        blockChangeLogRepo.deleteByDocument(document);
+        List<com.blockverse.app.entity.Block> rootBlocks = blockRepo.findByDocumentAndParentIsNull(document);
+        blockRepo.deleteAll(rootBlocks);
         documentRepo.delete(document);
     }
-    
+
     public List<DocumentResponse> getTrashDocumentsByWorkspace(int workspaceId) {
         User user = securityUtil.getLoggedInUser();
         WorkSpace workSpace = getWorkSpaceOrThrow(workspaceId);
         getMembershipOrThrow(user, workSpace);
-        
-        List<Document> documents = documentRepo.findByWorkSpaceAndArchivedFalseAndDeletedFalseOrderByCreatedAtDesc(workSpace);
-        
+
+        List<Document> documents = documentRepo.findByWorkSpaceAndDeletedTrue(workSpace);
+
         return documents.stream()
-                .filter(Document::isDeleted)
                 .map(documentMapper::toResponse)
                 .toList();
     }
