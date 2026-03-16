@@ -35,7 +35,7 @@ public class AuthService {
         String accessToken = jwtUtil.generateAccessToken(user);
         String refreshToken = jwtUtil.generateRefreshToken(user);
 
-        user.setRefreshToken(refreshToken);
+        user.setRefreshToken(passwordEncoder.encode(hashTokenForBcrypt(refreshToken)));
         userRepo.save(user);
 
         return new LoginResponseDTO(accessToken, refreshToken);
@@ -57,6 +57,9 @@ public class AuthService {
         String accessToken = jwtUtil.generateAccessToken(user);
         String refreshToken = jwtUtil.generateRefreshToken(user);
 
+        user.setRefreshToken(passwordEncoder.encode(hashTokenForBcrypt(refreshToken)));
+        userRepo.save(user);
+
         return new SignupResponseDTO(accessToken, refreshToken);
     }
 
@@ -72,17 +75,27 @@ public class AuthService {
         User user = userRepo.findByEmail(email)
                 .orElseThrow(()-> new UserNotFoundException("User not found with email: " + email));
         
-        if(!passwordEncoder.matches(refreshToken, user.getRefreshToken())){
+        if(!passwordEncoder.matches(hashTokenForBcrypt(refreshToken), user.getRefreshToken())){
             throw new InvalidTokenException("Refresh token does not match");
         }
         
         String newAccessToken = jwtUtil.generateAccessToken(user);
         String newRefreshToken = jwtUtil.generateRefreshToken(user);
         
-        user.setRefreshToken(passwordEncoder.encode(newRefreshToken));
+        user.setRefreshToken(passwordEncoder.encode(hashTokenForBcrypt(newRefreshToken)));
         userRepo.save(user);
             
         return new RefreshTokenResponseDTO(newAccessToken, newRefreshToken);
+    }
+
+    private String hashTokenForBcrypt(String token) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.Base64.getEncoder().encodeToString(digest);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new RuntimeException("Failed to hash token", e);
+        }
     }
 
 }

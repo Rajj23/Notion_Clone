@@ -62,8 +62,6 @@ public class AuthServiceTest {
         when(userRepo.findByEmail("aspen@gmail.com"))
                 .thenReturn(Optional.empty());
 
-        when(passwordEncoder.encode("12345678a"))
-                .thenReturn("encodedPassword");
 
         User savedUser = User.builder()
                 .name("Aspen")
@@ -79,6 +77,9 @@ public class AuthServiceTest {
 
         when(jwtUtil.generateRefreshToken(savedUser))
                 .thenReturn("refreshToken");
+
+        when(passwordEncoder.encode(any()))
+                .thenReturn("encodedRefreshToken");
 
         SignupResponseDTO response = authService.signup(requestDTO);
 
@@ -106,6 +107,9 @@ public class AuthServiceTest {
 
         when(jwtUtil.generateRefreshToken(user))
                 .thenReturn("refreshToken");
+
+        when(passwordEncoder.encode(any()))
+                .thenReturn("encodedRefreshToken");
 
         LoginResponseDTO responseDTO = authService.login(requestDTO);
 
@@ -141,12 +145,12 @@ public class AuthServiceTest {
         when(jwtUtil.getEmailFromToken(oldToken)).thenReturn("aspen@gmail.com");
         when(userRepo.findByEmail("aspen@gmail.com"))
                 .thenReturn(Optional.of(user));
-        when(passwordEncoder.matches(oldToken, "encodedOldToken")).thenReturn(true);
+        when(passwordEncoder.matches(any(), any())).thenReturn(true);
         
         when(jwtUtil.generateAccessToken(user)).thenReturn("newAccessToken");
         when(jwtUtil.generateRefreshToken(user)).thenReturn("newRefreshToken");
         
-        when(passwordEncoder.encode("newRefreshToken"))
+        when(passwordEncoder.encode(any()))
                 .thenReturn("encodedNewRefreshToken");
         
         RefreshTokenResponseDTO response = authService.refreshToken(request);
