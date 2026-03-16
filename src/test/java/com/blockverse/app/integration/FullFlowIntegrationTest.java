@@ -637,4 +637,151 @@ class FullFlowIntegrationTest {
                                         .andExpect(status().isForbidden());
                 }
         }
+
+        // ========================================================================
+        // Document Trash Flow
+        // ========================================================================
+
+        @Nested
+        @DisplayName("Document Trash Flow")
+        class DocumentTrashFlowTests {
+
+                private String token;
+                private int workspaceId;
+
+                @BeforeEach
+                void setup() throws Exception {
+                        token = signupAndGetToken("Alice", "alice@test.com", "secret123");
+                        workspaceId = createWorkspaceAndGetId(token, "Trash WS", "PRIVATE");
+                }
+
+                @Test
+                @DisplayName("should soft-delete, list in trash, restore from trash")
+                void softDeleteAndRestore() throws Exception {
+                        int docId = createDocumentAndGetId(token, workspaceId, "Trash Me");
+
+                        mockMvc.perform(delete("/v1/documents/" + docId + "/delete")
+                                        .header("Authorization", "Bearer " + token))
+                                        .andExpect(status().isOk())
+                                        .andExpect(content().string("Document deleted successfully"));
+
+                        mockMvc.perform(get("/v1/documents/" + docId)
+                                        .header("Authorization", "Bearer " + token))
+                                        .andExpect(status().isNotFound());
+
+                        mockMvc.perform(get("/v1/documents/workspace/" + workspaceId + "/trash")
+                                        .header("Authorization", "Bearer " + token))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$", hasSize(1)))
+                                        .andExpect(jsonPath("$[0].title").value("Trash Me"));
+
+                        mockMvc.perform(delete("/v1/documents/" + docId + "/restore")
+                                        .header("Authorization", "Bearer " + token))
+                                        .andExpect(status().isOk())
+                                        .andExpect(content().string("Document restored successfully"));
+
+                        mockMvc.perform(get("/v1/documents/" + docId)
+                                        .header("Authorization", "Bearer " + token))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$.title").value("Trash Me"));
+
+                        mockMvc.perform(get("/v1/documents/workspace/" + workspaceId + "/trash")
+                                        .header("Authorization", "Bearer " + token))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$", hasSize(0)));
+                }
+
+                @Test
+                @DisplayName("should permanent-delete a trashed document")
+                void permanentDeleteFlow() throws Exception {
+                        int docId = createDocumentAndGetId(token, workspaceId, "Permanent Delete Me");
+
+                        mockMvc.perform(delete("/v1/documents/" + docId + "/delete")
+                                        .header("Authorization", "Bearer " + token))
+                                        .andExpect(status().isOk());
+
+                        mockMvc.perform(delete("/v1/documents/" + docId + "/permanent")
+                                        .header("Authorization", "Bearer " + token))
+                                        .andExpect(status().isOk())
+                                        .andExpect(content().string("Document permanently deleted successfully"));
+
+                        mockMvc.perform(get("/v1/documents/workspace/" + workspaceId + "/trash")
+                                        .header("Authorization", "Bearer " + token))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$", hasSize(0)));
+                }
+
+                @Test
+                @DisplayName("trash list should be empty when no documents are deleted")
+                void trashList_empty() throws Exception {
+                        createDocumentAndGetId(token, workspaceId, "Not Trashed");
+
+                        mockMvc.perform(get("/v1/documents/workspace/" + workspaceId + "/trash")
+                                        .header("Authorization", "Bearer " + token))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$", hasSize(0)));
+                }
+        }
+
+        // ========================================================================
+        // Version Restore Flow
+        // ========================================================================
+
+        @Nested
+        @DisplayName("Version Restore Flow")
+        class VersionRestoreFlowTests {
+
+                private String token;
+                private int documentId;
+
+                @BeforeEach
+                void setup() throws Exception {
+                        token = signupAndGetToken("Alice", "alice@test.com", "secret123");
+                        int workspaceId = createWorkspaceAndGetId(token, "Version WS", "PRIVATE");
+                        documentId = createDocumentAndGetId(token, workspaceId, "Version Doc");
+                }
+
+                @Test
+                @DisplayName("should restore document to earlier version — blocks created after target are removed")
+                void restoreToEarlierVersion() throws Exception {
+                        createBlockAndGetId(token, documentId, null, "PARAGRAPH", "Block 1");
+                        Long versionAfterBlock1 = getDocumentVersion(token, documentId);
+
+                        createBlockAndGetId(token, documentId, null, "PARAGRAPH", "Block 2");
+
+                        mockMvc.perform(get("/v1/documents/" + documentId + "/details")
+                                        .header("Authorization", "Bearer " + token))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$.blocks", hasSize(2)));
+
+                        mockMvc.perform(post("/v1/blocks/restore/" + documentId)
+                                        .header("Authorization", "Bearer " + token)
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("""
+                                                        {"targetVersion": %d}
+                                                        """.formatted(versionAfterBlock1)))
+                                        .andExpect(status().isOk())
+                                        .andExpect(content().string("Document version restored successfully"));
+
+                        mockMvc.perform(get("/v1/documents/" + documentId + "/details")
+                                        .header("Authorization", "Bearer " + token))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$.blocks", hasSize(1)))
+                                        .andExpect(jsonPath("$.blocks[0].content").value("Block 1"));
+                }
+
+                @Test
+                @DisplayName("should retrieve document history showing version changes")
+                void getHistory() throws Exception {
+                        createBlockAndGetId(token, documentId, null, "PARAGRAPH", "First block");
+                        createBlockAndGetId(token, documentId, null, "HEADING1", "Second block");
+
+                        mockMvc.perform(get("/v1/blocks/history/" + documentId)
+                                        .header("Authorization", "Bearer " + token))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$").isArray())
+                                        .andExpect(jsonPath("$.length()")
+                                                        .value(org.hamcrest.Matchers.greaterThanOrEqualTo(2)));
+                }
+        }
 }
