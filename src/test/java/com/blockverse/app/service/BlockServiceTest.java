@@ -2,7 +2,10 @@ package com.blockverse.app.service;
 
 import com.blockverse.app.dto.block.*;
 import com.blockverse.app.entity.*;
+import com.blockverse.app.enums.BlockOperationType;
 import com.blockverse.app.enums.BlockType;
+import com.blockverse.app.enums.AuditActionType;
+import com.blockverse.app.enums.AuditEntityType;
 import com.blockverse.app.exception.*;
 import com.blockverse.app.repo.BlockChangeLogRepo;
 import com.blockverse.app.repo.BlockRepo;
@@ -40,6 +43,8 @@ class BlockServiceTest {
     private BlockRepo blockRepo;
     @Mock
     private BlockChangeLogRepo blockChangeLogRepo;
+    @Mock
+    private AuditLogService auditLogService;
 
     @InjectMocks
     private BlockService blockService;
@@ -80,7 +85,7 @@ class BlockServiceTest {
     }
 
     private void stubChangeLogDependencies() {
-        when(documentRepo.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(documentRepo.saveAndFlush(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
         when(blockChangeLogRepo.save(any(BlockChangeLog.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -120,6 +125,7 @@ class BlockServiceTest {
                     "New content".equals(block.getContent()) &&
                     block.getType() == BlockType.PARAGRAPH &&
                     block.getPosition().equals(BigInteger.valueOf(10000))));
+            verify(auditLogService).auditLog(eq(1), eq(1), eq(AuditEntityType.BLOCK), eq(10), eq(AuditActionType.BLOCK_CREATED), anyString());
         }
 
         @Test
@@ -151,6 +157,7 @@ class BlockServiceTest {
             verify(blockRepo).save(argThat(block -> block.getParent() != null &&
                     block.getParent().getId() == 5 &&
                     block.getDocument().equals(testDocument)));
+            verify(auditLogService).auditLog(eq(1), eq(1), eq(AuditEntityType.BLOCK), eq(11), eq(AuditActionType.BLOCK_CREATED), anyString());
         }
 
         @Test
@@ -338,6 +345,7 @@ class BlockServiceTest {
             assertEquals(BlockType.HEADING2, testBlock.getType(), "Entity type should be mutated");
             assertEquals("Updated", testBlock.getContent(), "Entity content should be mutated");
             verify(blockRepo).save(testBlock);
+            verify(auditLogService).auditLog(eq(1), eq(1), eq(AuditEntityType.BLOCK), eq(1), eq(AuditActionType.BLOCK_UPDATED), anyString());
         }
 
         @Test
@@ -425,6 +433,7 @@ class BlockServiceTest {
 
             assertTrue(testBlock.isDeleted(), "Block entity must have deleted=true after soft delete");
             verify(blockRepo).save(testBlock);
+            verify(auditLogService).auditLog(eq(1), eq(1), eq(AuditEntityType.BLOCK), eq(1), eq(AuditActionType.BLOCK_DELETED), anyString());
         }
 
         @Test
@@ -570,6 +579,7 @@ class BlockServiceTest {
             assertEquals(newParent, testBlock.getParent(), "Entity parent must be updated");
             assertEquals(BigInteger.valueOf(20000), testBlock.getPosition(), "Entity position must be updated");
             verify(blockRepo).save(testBlock);
+            verify(auditLogService).auditLog(eq(1), eq(1), eq(AuditEntityType.BLOCK), eq(1), eq(AuditActionType.BLOCK_MOVED), anyString());
         }
 
         @Test
@@ -700,6 +710,311 @@ class BlockServiceTest {
 
             assertEquals(BigInteger.valueOf(20000), response.getPosition());
             verify(blockRepo).save(testBlock);
+        }
+    }
+
+    // ========================================================================
+    // restoreDocumentVersion
+    // ========================================================================
+
+    @Nested
+    @DisplayName("restoreDocumentVersion")
+    class RestoreDocumentVersionTests {
+
+        @Test
+        @DisplayName("should reverse CREATE operation — sets block deleted=true")
+        void restoreVersion_reverseCreate() {
+            stubAuthenticatedMember();
+            testDocument.setVersion(5L);
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+
+            Block createdBlock = Block.builder().id(10).document(testDocument)
+                    .type(BlockType.PARAGRAPH).content("Created")
+                    .position(BigInteger.valueOf(10000)).deleted(false)
+                    .children(new ArrayList<>()).build();
+
+            BlockChangeLog log = BlockChangeLog.builder()
+                    .id(1).document(testDocument).block(createdBlock)
+                    .operationType(BlockOperationType.CREATE)
+                    .newContent("Created").newPosition(BigInteger.valueOf(10000))
+                    .versionNumber(5L).build();
+
+            when(blockChangeLogRepo.findByDocumentAndVersionNumberGreaterThanOrderByVersionNumberDesc(
+                    testDocument, 3L)).thenReturn(List.of(log));
+            when(blockRepo.findById(10)).thenReturn(Optional.of(createdBlock));
+            when(blockRepo.save(any(Block.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(documentRepo.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            RestoreDocumentVersionRequest request = new RestoreDocumentVersionRequest(3L);
+            blockService.restoreDocumentVersion(1, request);
+
+            assertTrue(createdBlock.isDeleted(), "Created block should be deleted when version is reversed");
+            verify(blockRepo).save(createdBlock);
+            verify(auditLogService).auditLog(eq(1), eq(1), eq(AuditEntityType.DOCUMENT), eq(1), eq(AuditActionType.DOCUMENT_RESTORED), anyString());
+        }
+
+        @Test
+        @DisplayName("should reverse DELETE operation — restores block content and position")
+        void restoreVersion_reverseDelete() {
+            stubAuthenticatedMember();
+            testDocument.setVersion(5L);
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+
+            Block deletedBlock = Block.builder().id(10).document(testDocument)
+                    .type(BlockType.PARAGRAPH).content(null)
+                    .position(null).deleted(true)
+                    .children(new ArrayList<>()).build();
+
+            BlockChangeLog log = BlockChangeLog.builder()
+                    .id(1).document(testDocument).block(deletedBlock)
+                    .operationType(BlockOperationType.DELETE)
+                    .oldContent("Original content").oldPosition(BigInteger.valueOf(10000))
+                    .versionNumber(5L).build();
+
+            when(blockChangeLogRepo.findByDocumentAndVersionNumberGreaterThanOrderByVersionNumberDesc(
+                    testDocument, 3L)).thenReturn(List.of(log));
+            when(blockRepo.findById(10)).thenReturn(Optional.of(deletedBlock));
+            when(blockRepo.save(any(Block.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(documentRepo.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            RestoreDocumentVersionRequest request = new RestoreDocumentVersionRequest(3L);
+            blockService.restoreDocumentVersion(1, request);
+
+            assertFalse(deletedBlock.isDeleted(), "Deleted block should be restored");
+            assertEquals("Original content", deletedBlock.getContent());
+            assertEquals(BigInteger.valueOf(10000), deletedBlock.getPosition());
+        }
+
+        @Test
+        @DisplayName("should reverse UPDATE operation — restores old content")
+        void restoreVersion_reverseUpdate() {
+            stubAuthenticatedMember();
+            testDocument.setVersion(5L);
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+
+            Block updatedBlock = Block.builder().id(10).document(testDocument)
+                    .type(BlockType.PARAGRAPH).content("New content")
+                    .position(BigInteger.valueOf(10000)).deleted(false)
+                    .children(new ArrayList<>()).build();
+
+            BlockChangeLog log = BlockChangeLog.builder()
+                    .id(1).document(testDocument).block(updatedBlock)
+                    .operationType(BlockOperationType.UPDATE)
+                    .oldContent("Old content").newContent("New content")
+                    .versionNumber(5L).build();
+
+            when(blockChangeLogRepo.findByDocumentAndVersionNumberGreaterThanOrderByVersionNumberDesc(
+                    testDocument, 3L)).thenReturn(List.of(log));
+            when(blockRepo.findById(10)).thenReturn(Optional.of(updatedBlock));
+            when(blockRepo.save(any(Block.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(documentRepo.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            RestoreDocumentVersionRequest request = new RestoreDocumentVersionRequest(3L);
+            blockService.restoreDocumentVersion(1, request);
+
+            assertEquals("Old content", updatedBlock.getContent(), "Content should be restored to old value");
+        }
+
+        @Test
+        @DisplayName("should reverse MOVE operation — restores old parent and position")
+        void restoreVersion_reverseMove() {
+            stubAuthenticatedMember();
+            testDocument.setVersion(5L);
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+
+            Block parentBlock = Block.builder().id(20).document(testDocument)
+                    .type(BlockType.HEADING1).content("Parent")
+                    .position(BigInteger.valueOf(10000)).deleted(false)
+                    .children(new ArrayList<>()).build();
+
+            Block movedBlock = Block.builder().id(10).document(testDocument)
+                    .type(BlockType.PARAGRAPH).content("Moved")
+                    .position(BigInteger.valueOf(30000)).deleted(false).parent(null)
+                    .children(new ArrayList<>()).build();
+
+            BlockChangeLog log = BlockChangeLog.builder()
+                    .id(1).document(testDocument).block(movedBlock)
+                    .operationType(BlockOperationType.MOVE)
+                    .oldPosition(BigInteger.valueOf(10000))
+                    .newPosition(BigInteger.valueOf(30000))
+                    .oldParentId(20).newParentId(null)
+                    .versionNumber(5L).build();
+
+            when(blockChangeLogRepo.findByDocumentAndVersionNumberGreaterThanOrderByVersionNumberDesc(
+                    testDocument, 3L)).thenReturn(List.of(log));
+            when(blockRepo.findById(10)).thenReturn(Optional.of(movedBlock));
+            when(blockRepo.findById(20)).thenReturn(Optional.of(parentBlock));
+            when(blockRepo.save(any(Block.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(documentRepo.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            RestoreDocumentVersionRequest request = new RestoreDocumentVersionRequest(3L);
+            blockService.restoreDocumentVersion(1, request);
+
+            assertEquals(parentBlock, movedBlock.getParent(), "Parent should be restored");
+            assertEquals(BigInteger.valueOf(10000), movedBlock.getPosition(), "Position should be restored");
+        }
+
+        @Test
+        @DisplayName("should reverse MOVE to root — sets parent to null")
+        void restoreVersion_reverseMoveToRoot() {
+            stubAuthenticatedMember();
+            testDocument.setVersion(5L);
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+
+            Block parentBlock = Block.builder().id(20).document(testDocument)
+                    .type(BlockType.HEADING1).content("Parent")
+                    .children(new ArrayList<>()).build();
+
+            Block movedBlock = Block.builder().id(10).document(testDocument)
+                    .type(BlockType.PARAGRAPH).content("Moved")
+                    .parent(parentBlock).position(BigInteger.valueOf(30000)).deleted(false)
+                    .children(new ArrayList<>()).build();
+
+            BlockChangeLog log = BlockChangeLog.builder()
+                    .id(1).document(testDocument).block(movedBlock)
+                    .operationType(BlockOperationType.MOVE)
+                    .oldPosition(BigInteger.valueOf(10000))
+                    .newPosition(BigInteger.valueOf(30000))
+                    .oldParentId(null).newParentId(20)
+                    .versionNumber(5L).build();
+
+            when(blockChangeLogRepo.findByDocumentAndVersionNumberGreaterThanOrderByVersionNumberDesc(
+                    testDocument, 3L)).thenReturn(List.of(log));
+            when(blockRepo.findById(10)).thenReturn(Optional.of(movedBlock));
+            when(blockRepo.save(any(Block.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(documentRepo.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            RestoreDocumentVersionRequest request = new RestoreDocumentVersionRequest(3L);
+            blockService.restoreDocumentVersion(1, request);
+
+            assertNull(movedBlock.getParent(), "Parent should be null when original had no parent");
+            assertEquals(BigInteger.valueOf(10000), movedBlock.getPosition());
+        }
+
+        @Test
+        @DisplayName("must reject target version greater than current version")
+        void restoreVersion_targetVersionTooHigh() {
+            stubAuthenticatedMember();
+            testDocument.setVersion(3L);
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+
+            RestoreDocumentVersionRequest request = new RestoreDocumentVersionRequest(5L);
+
+            assertThrows(DocumentLevelException.class,
+                    () -> blockService.restoreDocumentVersion(1, request));
+            verify(blockRepo, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("must reject non-workspace-member")
+        void restoreVersion_nonMember() {
+            stubAuthenticatedNonMember();
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+
+            RestoreDocumentVersionRequest request = new RestoreDocumentVersionRequest(1L);
+
+            assertThrows(NotWorkSpaceMemberException.class,
+                    () -> blockService.restoreDocumentVersion(1, request));
+        }
+
+        @Test
+        @DisplayName("must reject when document does not exist")
+        void restoreVersion_documentNotFound() {
+            when(securityUtil.getLoggedInUser()).thenReturn(testUser);
+            when(documentRepo.findById(999)).thenReturn(Optional.empty());
+
+            RestoreDocumentVersionRequest request = new RestoreDocumentVersionRequest(1L);
+
+            assertThrows(DocumentNotFoundException.class,
+                    () -> blockService.restoreDocumentVersion(999, request));
+        }
+
+        @Test
+        @DisplayName("should skip blocks that no longer exist in the database")
+        void restoreVersion_skipsDeletedBlocks() {
+            stubAuthenticatedMember();
+            testDocument.setVersion(5L);
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+
+            Block phantomBlock = Block.builder().id(99).build();
+            BlockChangeLog log = BlockChangeLog.builder()
+                    .id(1).document(testDocument).block(phantomBlock)
+                    .operationType(BlockOperationType.CREATE)
+                    .versionNumber(5L).build();
+
+            when(blockChangeLogRepo.findByDocumentAndVersionNumberGreaterThanOrderByVersionNumberDesc(
+                    testDocument, 3L)).thenReturn(List.of(log));
+            when(blockRepo.findById(99)).thenReturn(Optional.empty());
+            when(documentRepo.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            RestoreDocumentVersionRequest request = new RestoreDocumentVersionRequest(3L);
+            blockService.restoreDocumentVersion(1, request);
+
+            verify(blockRepo, never()).save(any());
+            verify(auditLogService).auditLog(eq(1), eq(1), eq(AuditEntityType.DOCUMENT), eq(1), eq(AuditActionType.DOCUMENT_RESTORED), anyString());
+        }
+    }
+
+    // ========================================================================
+    // getDocumentHistory
+    // ========================================================================
+
+    @Nested
+    @DisplayName("getDocumentHistory")
+    class GetDocumentHistoryTests {
+
+        @Test
+        @DisplayName("should return change logs for document ordered by version desc")
+        void getDocumentHistory_success() {
+            stubAuthenticatedMember();
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+
+            BlockChangeLog log1 = BlockChangeLog.builder().id(1).document(testDocument)
+                    .operationType(BlockOperationType.CREATE).versionNumber(2L).build();
+            BlockChangeLog log2 = BlockChangeLog.builder().id(2).document(testDocument)
+                    .operationType(BlockOperationType.UPDATE).versionNumber(1L).build();
+
+            when(blockChangeLogRepo.findByDocumentOrderByVersionNumberDesc(testDocument))
+                    .thenReturn(List.of(log1, log2));
+
+            List<BlockChangeLog> result = blockService.getDocumentHistory(1);
+
+            assertEquals(2, result.size());
+            assertEquals(2L, result.get(0).getVersionNumber());
+            assertEquals(1L, result.get(1).getVersionNumber());
+        }
+
+        @Test
+        @DisplayName("should return empty list when no history exists")
+        void getDocumentHistory_empty() {
+            stubAuthenticatedMember();
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+            when(blockChangeLogRepo.findByDocumentOrderByVersionNumberDesc(testDocument))
+                    .thenReturn(List.of());
+
+            List<BlockChangeLog> result = blockService.getDocumentHistory(1);
+
+            assertTrue(result.isEmpty());
+        }
+
+        @Test
+        @DisplayName("must reject non-workspace-member")
+        void getDocumentHistory_nonMember() {
+            stubAuthenticatedNonMember();
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+
+            assertThrows(NotWorkSpaceMemberException.class,
+                    () -> blockService.getDocumentHistory(1));
+        }
+
+        @Test
+        @DisplayName("must reject when document does not exist")
+        void getDocumentHistory_documentNotFound() {
+            when(securityUtil.getLoggedInUser()).thenReturn(testUser);
+            when(documentRepo.findById(999)).thenReturn(Optional.empty());
+
+            assertThrows(DocumentNotFoundException.class,
+                    () -> blockService.getDocumentHistory(999));
         }
     }
 }

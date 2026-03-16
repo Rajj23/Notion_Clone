@@ -442,4 +442,117 @@ class BlockControllerTest {
                                         .andExpect(status().isForbidden());
                 }
         }
+
+        // ========================================================================
+        // POST /v1/blocks/restore/{documentId} — restoreDocumentVersion
+        // ========================================================================
+
+        @Nested
+        @DisplayName("POST /v1/blocks/restore/{documentId}")
+        class RestoreDocumentVersionTests {
+
+                @Test
+                @DisplayName("should return 200 with success message when version is restored")
+                void restoreVersion_success() throws Exception {
+                        doNothing().when(blockService).restoreDocumentVersion(eq(1),
+                                        any(RestoreDocumentVersionRequest.class));
+
+                        mockMvc.perform(post("/v1/blocks/restore/1")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("""
+                                                        {"targetVersion": 3}
+                                                        """))
+                                        .andExpect(status().isOk())
+                                        .andExpect(content().string("Document version restored successfully"));
+
+                        verify(blockService).restoreDocumentVersion(eq(1), any(RestoreDocumentVersionRequest.class));
+                }
+
+                @Test
+                @DisplayName("should return 400 when target version is invalid")
+                void restoreVersion_invalidTarget() throws Exception {
+                        doThrow(new DocumentLevelException(
+                                        "Target version must be less than or equal to current version"))
+                                        .when(blockService)
+                                        .restoreDocumentVersion(eq(1), any(RestoreDocumentVersionRequest.class));
+
+                        mockMvc.perform(post("/v1/blocks/restore/1")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("""
+                                                        {"targetVersion": 999}
+                                                        """))
+                                        .andExpect(status().isBadRequest());
+                }
+
+                @Test
+                @DisplayName("should return 404 when document does not exist")
+                void restoreVersion_notFound() throws Exception {
+                        doThrow(new DocumentNotFoundException("Document not found"))
+                                        .when(blockService)
+                                        .restoreDocumentVersion(eq(999), any(RestoreDocumentVersionRequest.class));
+
+                        mockMvc.perform(post("/v1/blocks/restore/999")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("""
+                                                        {"targetVersion": 1}
+                                                        """))
+                                        .andExpect(status().isNotFound());
+                }
+
+                @Test
+                @DisplayName("should return 403 when user is not a workspace member")
+                void restoreVersion_nonMember() throws Exception {
+                        doThrow(new NotWorkSpaceMemberException("User is not a member"))
+                                        .when(blockService)
+                                        .restoreDocumentVersion(eq(1), any(RestoreDocumentVersionRequest.class));
+
+                        mockMvc.perform(post("/v1/blocks/restore/1")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("""
+                                                        {"targetVersion": 1}
+                                                        """))
+                                        .andExpect(status().isForbidden());
+                }
+        }
+
+        // ========================================================================
+        // GET /v1/blocks/history/{documentId} — getDocumentHistory
+        // ========================================================================
+
+        @Nested
+        @DisplayName("GET /v1/blocks/history/{documentId}")
+        class GetDocumentHistoryTests {
+
+                @Test
+                @DisplayName("should return 200 with list of change logs")
+                void getHistory_success() throws Exception {
+                        when(blockService.getDocumentHistory(1))
+                                        .thenReturn(List.of());
+
+                        mockMvc.perform(get("/v1/blocks/history/1"))
+                                        .andExpect(status().isOk());
+
+                        verify(blockService).getDocumentHistory(1);
+                }
+
+                @Test
+                @DisplayName("should return 404 when document does not exist")
+                void getHistory_notFound() throws Exception {
+                        when(blockService.getDocumentHistory(999))
+                                        .thenThrow(new DocumentNotFoundException("Document not found"));
+
+                        mockMvc.perform(get("/v1/blocks/history/999"))
+                                        .andExpect(status().isNotFound());
+                }
+
+                @Test
+                @DisplayName("should return 403 when user is not a workspace member")
+                void getHistory_nonMember() throws Exception {
+                        when(blockService.getDocumentHistory(1))
+                                        .thenThrow(new NotWorkSpaceMemberException("User is not a member"));
+
+                        mockMvc.perform(get("/v1/blocks/history/1"))
+                                        .andExpect(status().isForbidden());
+                }
+        }
 }
