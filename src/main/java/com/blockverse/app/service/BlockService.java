@@ -72,7 +72,7 @@ public class BlockService {
             User user) {
 
         document.setUpdatedAt(LocalDateTime.now());
-        Document savedDocument = documentRepo.save(document);
+        Document savedDocument = documentRepo.saveAndFlush(document);
 
         BlockChangeLog log = BlockChangeLog.builder()
                 .document(savedDocument)
@@ -103,10 +103,17 @@ public class BlockService {
 
     }
 
+    private void checkActiveDocument(Document document) {
+        if(document.isArchived() || document.isDeleted()){
+            throw new DocumentLevelException("Cannot modify blocks in an archived or deleted document");
+        }
+    }
+
     public BlockResponse createBlock(int documentId, CreateBlockRequest request){
         User currentUser = securityUtil.getLoggedInUser();
 
         Document document = getDocumentOrThrow(documentId);
+        checkActiveDocument(document);
         WorkSpace workSpace = document.getWorkSpace();
         getMembershipOrThrow(currentUser, workSpace);
 
@@ -183,9 +190,12 @@ public class BlockService {
             if(block.getParent() == null){
                 roots.add(dto);
             } else {
-                map.get(block.getParent().getId())
-                        .getChildren()
-                        .add(dto);
+                BlockResponse parentDto = map.get(block.getParent().getId());
+                if(parentDto != null) {
+                    parentDto.getChildren().add(dto);
+                } else {
+                    roots.add(dto); 
+                }
             }
         }
 
@@ -197,6 +207,7 @@ public class BlockService {
         Block block = getBlockOrThrow(blockId);
 
         Document document = block.getDocument();
+        checkActiveDocument(document);
         WorkSpace workSpace = document.getWorkSpace();
         getMembershipOrThrow(currentUser, workSpace);
 
@@ -235,6 +246,7 @@ public class BlockService {
         Block block = getBlockOrThrow(blockId);
 
         Document document = block.getDocument();
+        checkActiveDocument(document);
         WorkSpace workSpace = document.getWorkSpace();
         getMembershipOrThrow(currentUser, workSpace);
 
@@ -283,6 +295,7 @@ public class BlockService {
         User user = securityUtil.getLoggedInUser();
         Block block = getBlockOrThrow(blockId);
         Document document = block.getDocument();
+        checkActiveDocument(document);
         getMembershipOrThrow(user, document.getWorkSpace());
 
         Block newParent = null;
@@ -330,6 +343,7 @@ public class BlockService {
     public void restoreDocumentVersion(int documentId, RestoreDocumentVersionRequest request){
         User user = securityUtil.getLoggedInUser();
         Document document = getDocumentOrThrow(documentId);
+        checkActiveDocument(document);
         getMembershipOrThrow(user, document.getWorkSpace());
         
         if(document.getVersion() < request.getTargetVersion()){
@@ -368,7 +382,7 @@ public class BlockService {
                     
                     if(log.getOldParentId() != null){
                         Block parent = blockRepo.findById(log.getOldParentId())
-                                .orElseThrow(() -> new BlockNotFoundException("Parent block not found"));
+                                .orElse(null);
                         block.setParent(parent);
                     }
                     else{
@@ -387,7 +401,7 @@ public class BlockService {
                 "{\"restoredVersion\": "+ request.getTargetVersion() + "}"
         );
         
-        document.setVersion(request.getTargetVersion());
+        document.setUpdatedAt(LocalDateTime.now());
         documentRepo.save(document);
     }
     

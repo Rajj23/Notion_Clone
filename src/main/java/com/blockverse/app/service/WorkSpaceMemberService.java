@@ -67,9 +67,8 @@ public class WorkSpaceMemberService {
             throw new InsufficientPermissionException("Only workspace owners and admin can add members");
         }
         
-        if(request.getRole() == OWNER && 
-            currentUserMembership.getRole() != OWNER) {
-            throw new InsufficientPermissionException("Only owner can assign owner role");
+        if(request.getRole() == OWNER) {
+            throw new InsufficientPermissionException("Cannot assign OWNER role directly. Use transfer ownership instead.");
         }
 
         User user = getUserOrThrow(request.getEmail());
@@ -153,9 +152,8 @@ public class WorkSpaceMemberService {
             throw new InsufficientPermissionException("Only workspace owners and admin can change member roles");
         }
         
-        if(request.getRole() == OWNER && 
-            currentUserMembership.getRole() != OWNER) {
-            throw new InsufficientPermissionException("Only owner can assign owner role");
+        if(request.getRole() == OWNER) {
+            throw new InsufficientPermissionException("Cannot assign OWNER role directly. Use transfer ownership instead.");
         }
         
         User user = getUserOrThrow(request.getEmail());
@@ -164,6 +162,10 @@ public class WorkSpaceMemberService {
         
         if(membershipToChange.getRole() == OWNER) {
             throw new InsufficientPermissionException("Cannot change the role of the owner of the workspace");
+        }
+
+        if(currentUserMembership.getRole() == ADMIN && membershipToChange.getRole() == ADMIN) {
+            throw new InsufficientPermissionException("Admin cannot change the role of another admin");
         }
 
         auditLogService.auditLog(
@@ -198,7 +200,8 @@ public class WorkSpaceMemberService {
                     "{\"leftUserEmail\":\"" + user.getEmail() + "\"}"
             );
         
-        workSpaceMemberRepo.delete(currentUserMembership);
+        currentUserMembership.setDeletedAt(LocalDateTime.now());
+        workSpaceMemberRepo.save(currentUserMembership);
     }
     
     public void transferOwnership(int workspaceId, String newOwnerEmail){
@@ -209,6 +212,10 @@ public class WorkSpaceMemberService {
         
         if(currentUserMembership.getRole() != OWNER) {
              throw new InsufficientPermissionException("Only the current owner can transfer ownership");
+        }
+        
+        if (user.getEmail().equals(newOwnerEmail)) {
+            throw new IllegalArgumentException("You are already the owner of this workspace");
         }
         
         User newOwner = userRepo.findByEmail(newOwnerEmail)
