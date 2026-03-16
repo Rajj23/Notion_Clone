@@ -42,6 +42,9 @@ public class WorkspaceServiceTest {
     @Mock
     private UserRepo userRepo;
     
+    @Mock
+    private AuditLogService auditLogService;
+    
     @InjectMocks
     private WorkSpaceService workSpaceService;
     
