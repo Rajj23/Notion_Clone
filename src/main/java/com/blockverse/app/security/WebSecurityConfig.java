@@ -20,7 +20,7 @@ public class WebSecurityConfig {
                 .sessionManagement(sessionConfig->
                         sessionConfig.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth-> auth
-                .requestMatchers("/public/**","/v1/auth/**").permitAll()
+                .requestMatchers("/public/**","/v1/auth/**", "/ws/**").permitAll()
                                 .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 

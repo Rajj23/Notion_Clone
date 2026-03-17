@@ -3,6 +3,7 @@ package com.blockverse.app.service;
 import com.blockverse.app.dto.block.BlockResponse;
 import com.blockverse.app.dto.document.CreateDocumentRequest;
 import com.blockverse.app.dto.document.DocumentDetailsResponse;
+import com.blockverse.app.dto.document.DocumentEvent;
 import com.blockverse.app.dto.document.DocumentResponse;
 import com.blockverse.app.dto.document.UpdateDocumentRequest;
 import com.blockverse.app.entity.Document;
@@ -11,6 +12,7 @@ import com.blockverse.app.entity.WorkSpace;
 import com.blockverse.app.entity.WorkSpaceMember;
 import com.blockverse.app.enums.AuditActionType;
 import com.blockverse.app.enums.AuditEntityType;
+import com.blockverse.app.enums.DocumentOperationType;
 import com.blockverse.app.enums.WorkSpaceRole;
 import com.blockverse.app.exception.DocumentException;
 import com.blockverse.app.exception.DocumentNotFoundException;
@@ -44,6 +46,7 @@ public class DocumentService {
     private final AuditLogService auditLogService;
     private final BlockRepo blockRepo;
     private final BlockChangeLogRepo blockChangeLogRepo;
+    private final DocumentSocketPublisher documentSocketPublisher;
 
     private WorkSpace getWorkSpaceOrThrow(int workspaceId) {
         return workSpaceRepo.findById(workspaceId)
@@ -82,6 +85,16 @@ public class DocumentService {
                 document.getId(),
                 AuditActionType.DOCUMENT_CREATED,
                 "Document created with title: " + document.getTitle()
+        );
+
+        documentSocketPublisher.broadcast(
+                document.getId(),
+                new DocumentEvent(
+                        document.getId(),
+                        AuditEntityType.DOCUMENT,
+                        DocumentOperationType.CREATE,
+                        document.getId()
+                )
         );
 
         return documentMapper.toResponse(document);
@@ -138,6 +151,16 @@ public class DocumentService {
                 "Document updated with new title: " + document.getTitle()
         );
 
+        documentSocketPublisher.broadcast(
+                document.getId(),
+                new DocumentEvent(
+                        document.getId(),
+                        AuditEntityType.DOCUMENT,
+                        DocumentOperationType.UPDATE,
+                        document.getId()
+                )
+        );
+
         return documentMapper.toResponse(document);
     }
 
@@ -175,6 +198,17 @@ public class DocumentService {
                 AuditActionType.DOCUMENT_ARCHIVED,
                 "Document archived with title: " + document.getTitle()
         );
+
+        documentSocketPublisher.broadcast(
+                document.getId(),
+                new DocumentEvent(
+                        document.getId(),
+                        AuditEntityType.DOCUMENT,
+                        DocumentOperationType.ARCHIVE,
+                        document.getId()
+                )
+        );
+        
         document.setArchived(true);
         documentRepo.save(document);
     }
@@ -198,6 +232,17 @@ public class DocumentService {
                 AuditActionType.DOCUMENT_UNARCHIVED,
                 "Document unarchived with title: " + document.getTitle()
         );
+
+        documentSocketPublisher.broadcast(
+                document.getId(),
+                new DocumentEvent(
+                        document.getId(),
+                        AuditEntityType.DOCUMENT,
+                        DocumentOperationType.UNARCHIVE,
+                        document.getId()
+                )
+        );
+        
         document.setArchived(false);
         documentRepo.save(document);
     }
@@ -225,6 +270,16 @@ public class DocumentService {
                 "Document deleted with title: " + document.getTitle()
         );
 
+        documentSocketPublisher.broadcast(
+                document.getId(),
+                new DocumentEvent(
+                        document.getId(),
+                        AuditEntityType.DOCUMENT,
+                        DocumentOperationType.DELETE,
+                        document.getId()
+                )
+        );
+        
         document.setDeleted(true);
         document.setDeletedAt(LocalDateTime.now());
         document.setDeletedBy(user.getId());
@@ -250,6 +305,16 @@ public class DocumentService {
                 document.getId(),
                 AuditActionType.DOCUMENT_RESTORED,
                 "Document restored with title: " + document.getTitle());
+
+        documentSocketPublisher.broadcast(
+                document.getId(),
+                new DocumentEvent(
+                        document.getId(),
+                        AuditEntityType.DOCUMENT,
+                        DocumentOperationType.RESTORE,
+                        document.getId()
+                )
+        );
 
         document.setDeleted(false);
         document.setDeletedAt(null);
@@ -277,6 +342,16 @@ public class DocumentService {
                 document.getId(),
                 AuditActionType.DOCUMENT_PERMANENTLY_DELETED,
                 "Document permanently deleted with title: " + document.getTitle()
+        );
+
+        documentSocketPublisher.broadcast(
+                document.getId(),
+                new DocumentEvent(
+                        document.getId(),
+                        AuditEntityType.DOCUMENT,
+                        DocumentOperationType.PERMANENT_DELETE,
+                        document.getId()
+                )
         );
 
         blockChangeLogRepo.deleteByDocument(document);

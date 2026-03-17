@@ -45,8 +45,9 @@ class BlockServiceTest {
     private BlockChangeLogRepo blockChangeLogRepo;
     @Mock
     private AuditLogService auditLogService;
+    @Mock
+    private DocumentSocketPublisher documentSocketPublisher;
 
-    @InjectMocks
     private BlockService blockService;
 
     private User testUser;
@@ -57,6 +58,8 @@ class BlockServiceTest {
 
     @BeforeEach
     void setUp() {
+        documentSocketPublisher = mock(DocumentSocketPublisher.class);
+        blockService = new BlockService(documentRepo, workSpaceMemberRepo, securityUtil, blockRepo, blockChangeLogRepo, auditLogService, documentSocketPublisher);
         testUser = User.builder().id(1).name("Test User").email("test@mail.com").build();
         testWorkSpace = WorkSpace.builder().id(1).name("Test Workspace").build();
         testMember = WorkSpaceMember.builder().id(1).user(testUser).workSpace(testWorkSpace).build();

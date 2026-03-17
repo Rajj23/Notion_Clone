@@ -1,10 +1,12 @@
 package com.blockverse.app.service;
 
 import com.blockverse.app.dto.block.*;
+import com.blockverse.app.dto.document.DocumentEvent;
 import com.blockverse.app.entity.*;
 import com.blockverse.app.enums.AuditActionType;
 import com.blockverse.app.enums.AuditEntityType;
 import com.blockverse.app.enums.BlockOperationType;
+import com.blockverse.app.enums.DocumentOperationType;
 import com.blockverse.app.exception.*;
 import com.blockverse.app.mapper.BlockMapper;
 import com.blockverse.app.repo.*;
@@ -31,6 +33,7 @@ public class BlockService {
     private final BlockRepo blockRepo;
     private final BlockChangeLogRepo blockChangeLogRepo;
     private final AuditLogService auditLogService;
+    private final DocumentSocketPublisher documentSocketPublisher;
 
     private Document getDocumentOrThrow(int documentId) {
         return documentRepo.findById(documentId)
@@ -165,8 +168,19 @@ public class BlockService {
                 null,
                 currentUser);
 
+        BlockResponse blockResponse = BlockMapper.toBlockResponse(savedBlock);
+
+        documentSocketPublisher.broadcast(
+                document.getId(),
+                new DocumentEvent(
+                        document.getId(),
+                        AuditEntityType.BLOCK,
+                        BlockOperationType.CREATE,
+                        blockResponse
+                )
+        );
         
-        return BlockMapper.toBlockResponse(savedBlock);
+        return blockResponse;
     }
 
     public List<BlockResponse> getBlocksForDocument(int documentId){
@@ -238,7 +252,19 @@ public class BlockService {
                 "{\"documentId\": "+ document.getId() + "}"
         );
 
-        return BlockMapper.toBlockResponse(updatedBlock);
+        BlockResponse blockResponse = BlockMapper.toBlockResponse(updatedBlock);
+
+        documentSocketPublisher.broadcast(
+                document.getId(),
+                new DocumentEvent(
+                        document.getId(),
+                        AuditEntityType.BLOCK,
+                        BlockOperationType.UPDATE,
+                        blockResponse
+                )
+        );
+
+        return blockResponse;
     }
 
     public void deleteBlock(int blockId, DeleteBlockRequest request) {
@@ -272,6 +298,16 @@ public class BlockService {
                 block.getId(),
                 AuditActionType.BLOCK_DELETED,
                 "{\"title\": "+ document.getTitle() + "}"
+        );
+
+        documentSocketPublisher.broadcast(
+                document.getId(),
+                new DocumentEvent(
+                        document.getId(),
+                        AuditEntityType.BLOCK,
+                        BlockOperationType.DELETE,
+                        BlockMapper.toBlockResponse(block)
+                )
         );
 
         block.setDeleted(true);
@@ -336,7 +372,20 @@ public class BlockService {
                 "{\"documentId\": "+ document.getId() + "}"
         );
 
-        return BlockMapper.toBlockResponse(blockRepo.save(block));
+        Block savedBlock = blockRepo.save(block);
+        BlockResponse blockResponse = BlockMapper.toBlockResponse(savedBlock);
+
+        documentSocketPublisher.broadcast(
+                document.getId(),
+                new DocumentEvent(
+                        document.getId(),
+                        AuditEntityType.BLOCK,
+                        BlockOperationType.MOVE,
+                        blockResponse
+                )
+        );
+
+        return blockResponse;
     }
     
     @Transactional
@@ -399,6 +448,16 @@ public class BlockService {
                 document.getId(),
                 AuditActionType.DOCUMENT_RESTORED,
                 "{\"restoredVersion\": "+ request.getTargetVersion() + "}"
+        );
+
+        documentSocketPublisher.broadcast(
+                document.getId(),
+                new DocumentEvent(
+                        document.getId(),
+                        AuditEntityType.DOCUMENT,
+                        DocumentOperationType.RESTORE,
+                        request.getTargetVersion()
+                )
         );
         
         document.setUpdatedAt(LocalDateTime.now());
