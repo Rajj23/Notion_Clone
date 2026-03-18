@@ -1,9 +1,6 @@
 package com.blockverse.app.controller;
 
-import com.blockverse.app.dto.document.CreateDocumentRequest;
-import com.blockverse.app.dto.document.DocumentDetailsResponse;
-import com.blockverse.app.dto.document.DocumentResponse;
-import com.blockverse.app.dto.document.UpdateDocumentRequest;
+import com.blockverse.app.dto.document.*;
 import com.blockverse.app.service.DocumentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -77,5 +74,11 @@ public class DocumentController {
     @GetMapping("/workspace/{workspaceId}/trash")
     public ResponseEntity<List<DocumentResponse>> getTrashDocumentsByWorkspace(@PathVariable int workspaceId){
         return ResponseEntity.ok(documentService.getTrashDocumentsByWorkspace(workspaceId));
+    }
+    
+    @PostMapping("/{documentId}/share")
+    public ResponseEntity<ShareLinkResponse> createShareLink(@PathVariable int documentId, int expiryMinutes){
+        ShareLinkResponse shareLink = documentService.createShareLink(documentId, expiryMinutes);
+        return ResponseEntity.ok(shareLink);
     }
 }

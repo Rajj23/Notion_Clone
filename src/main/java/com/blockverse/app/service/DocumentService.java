@@ -1,15 +1,8 @@
 package com.blockverse.app.service;
 
 import com.blockverse.app.dto.block.BlockResponse;
-import com.blockverse.app.dto.document.CreateDocumentRequest;
-import com.blockverse.app.dto.document.DocumentDetailsResponse;
-import com.blockverse.app.dto.document.DocumentEvent;
-import com.blockverse.app.dto.document.DocumentResponse;
-import com.blockverse.app.dto.document.UpdateDocumentRequest;
-import com.blockverse.app.entity.Document;
-import com.blockverse.app.entity.User;
-import com.blockverse.app.entity.WorkSpace;
-import com.blockverse.app.entity.WorkSpaceMember;
+import com.blockverse.app.dto.document.*;
+import com.blockverse.app.entity.*;
 import com.blockverse.app.enums.AuditActionType;
 import com.blockverse.app.enums.AuditEntityType;
 import com.blockverse.app.enums.DocumentOperationType;
@@ -19,11 +12,7 @@ import com.blockverse.app.exception.DocumentNotFoundException;
 import com.blockverse.app.exception.InsufficientPermissionException;
 import com.blockverse.app.exception.WorkSpaceNotFoundException;
 import com.blockverse.app.mapper.DocumentMapper;
-import com.blockverse.app.repo.DocumentRepo;
-import com.blockverse.app.repo.WorkSpaceMemberRepo;
-import com.blockverse.app.repo.WorkSpaceRepo;
-import com.blockverse.app.repo.BlockRepo;
-import com.blockverse.app.repo.BlockChangeLogRepo;
+import com.blockverse.app.repo.*;
 import com.blockverse.app.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -31,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -47,6 +37,11 @@ public class DocumentService {
     private final BlockRepo blockRepo;
     private final BlockChangeLogRepo blockChangeLogRepo;
     private final DocumentSocketPublisher documentSocketPublisher;
+    private final DocumentShareRepo documentShareRepo;
+    
+    private String generateToken(){
+        return UUID.randomUUID().toString();
+    }
 
     private WorkSpace getWorkSpaceOrThrow(int workspaceId) {
         return workSpaceRepo.findById(workspaceId)
@@ -370,5 +365,31 @@ public class DocumentService {
         return documents.stream()
                 .map(documentMapper::toResponse)
                 .toList();
+    }
+    
+    public ShareLinkResponse createShareLink(int documentId, int expiryMinutes) {
+        User user = securityUtil.getLoggedInUser();
+        Document document = getDocumentOrThrow(documentId);
+        WorkSpaceMember member = getMembershipOrThrow(user, document.getWorkSpace());
+
+        if(member.getRole() != WorkSpaceRole.OWNER && member.getRole() != WorkSpaceRole.ADMIN) {
+            throw new InsufficientPermissionException("Only workspace owners or admin can create share links");
+        }
+
+        String token = generateToken();
+        LocalDateTime expiryTime = LocalDateTime.now().plusMinutes(expiryMinutes);
+
+        DocumentShare share = DocumentShare.builder()
+                .document(document)
+                .token(token)
+                .expiryTime(expiryTime)
+                .createdBy(user.getId())
+                .active(true)
+                .build();
+        
+         documentShareRepo.save(share);
+
+        return new ShareLinkResponse("http://localhost:8080/share/" + token,
+                expiryTime);
     }
 }
