@@ -350,6 +350,7 @@ public class DocumentService {
         );
 
         blockChangeLogRepo.deleteByDocument(document);
+        documentShareRepo.deleteByDocument(document);
         List<com.blockverse.app.entity.Block> rootBlocks = blockRepo.findByDocumentAndParentIsNull(document);
         blockRepo.deleteAll(rootBlocks);
         documentRepo.delete(document);
@@ -388,6 +389,15 @@ public class DocumentService {
                 .build();
         
          documentShareRepo.save(share);
+
+         auditLogService.auditLog(
+            document.getWorkSpace().getId(),
+            user.getId(),
+            AuditEntityType.DOCUMENT,
+            document.getId(),
+            AuditActionType.DOCUMENT_SHARED,
+            "{\"expiryMinutes\": " + expiryMinutes + "}"
+);
 
         return new ShareLinkResponse("http://localhost:8080/share/" + token,
                 expiryTime);
