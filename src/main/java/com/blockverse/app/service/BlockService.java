@@ -189,6 +189,15 @@ public class BlockService {
         WorkSpace workSpace = document.getWorkSpace();
         getMembershipOrThrow(currentUser, workSpace);
 
+        return getBlocksForDocumentInternal(document);
+    }
+
+    public List<BlockResponse> getBlocksForDocumentWithoutAuth(int documentId){
+        Document document = getDocumentOrThrow(documentId);
+        return getBlocksForDocumentInternal(document);
+    }
+
+    private List<BlockResponse> getBlocksForDocumentInternal(Document document){
         List<Block> blocks = blockRepo.findByDocumentAndDeletedFalseOrderByPositionAsc(document);
 
         Map<Integer, BlockResponse> map = new HashMap<>();

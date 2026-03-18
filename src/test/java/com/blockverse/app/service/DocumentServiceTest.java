@@ -64,6 +64,8 @@ class DocumentServiceTest {
     private BlockChangeLogRepo blockChangeLogRepo;
     @Mock
     private DocumentSocketPublisher documentSocketPublisher;
+    @Mock
+    private com.blockverse.app.repo.DocumentShareRepo documentShareRepo;
 
     private DocumentService documentService;
 
@@ -78,7 +80,7 @@ class DocumentServiceTest {
     @BeforeEach
     void setUp() {
         documentSocketPublisher = mock(DocumentSocketPublisher.class);
-        documentService = new DocumentService(documentMapper, documentRepo, workSpaceRepo, workSpaceMemberRepo, securityUtil, blockService, auditLogService, blockRepo, blockChangeLogRepo, documentSocketPublisher);
+        documentService = new DocumentService(documentMapper, documentRepo, workSpaceRepo, workSpaceMemberRepo, securityUtil, blockService, auditLogService, blockRepo, blockChangeLogRepo, documentSocketPublisher, documentShareRepo);
         testUser = User.builder().id(1).name("Test User").email("test@mail.com").build();
         testWorkSpace = WorkSpace.builder().id(1).name("Test Workspace").build();
         ownerMember = WorkSpaceMember.builder().id(1).user(testUser).workSpace(testWorkSpace).role(WorkSpaceRole.OWNER)
@@ -873,6 +875,92 @@ class DocumentServiceTest {
 
             assertThrows(InsufficientPermissionException.class,
                     () -> documentService.getTrashDocumentsByWorkspace(1));
+        }
+    }
+
+    // ========================================================================
+    // createShareLink
+    // ========================================================================
+
+    @Nested
+    @DisplayName("createShareLink")
+    class CreateShareLinkTests {
+
+        @Test
+        @DisplayName("OWNER should be able to create a share link")
+        void createShareLink_ownerSuccess() {
+            stubAuthenticatedMember(ownerMember);
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+            when(documentShareRepo.save(any(com.blockverse.app.entity.DocumentShare.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            com.blockverse.app.dto.document.ShareLinkResponse response = documentService.createShareLink(1, 60);
+
+            assertNotNull(response);
+            assertNotNull(response.getUrl());
+            assertTrue(response.getUrl().startsWith("http://localhost:8080/share/"));
+            assertNotNull(response.getExpiryTime());
+            verify(documentShareRepo).save(any(com.blockverse.app.entity.DocumentShare.class));
+            verify(auditLogService).auditLog(
+                    1,
+                    testUser.getId(),
+                    com.blockverse.app.enums.AuditEntityType.DOCUMENT,
+                    1,
+                    com.blockverse.app.enums.AuditActionType.DOCUMENT_SHARED,
+                    "{\"expiryMinutes\": 60}"
+            );
+        }
+
+        @Test
+        @DisplayName("ADMIN should be able to create a share link")
+        void createShareLink_adminSuccess() {
+            stubAuthenticatedMember(adminMember);
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+            when(documentShareRepo.save(any(com.blockverse.app.entity.DocumentShare.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            com.blockverse.app.dto.document.ShareLinkResponse response = documentService.createShareLink(1, 60);
+
+            assertNotNull(response);
+            verify(documentShareRepo).save(any(com.blockverse.app.entity.DocumentShare.class));
+            verify(auditLogService).auditLog(
+                    1,
+                    testUser.getId(),
+                    com.blockverse.app.enums.AuditEntityType.DOCUMENT,
+                    1,
+                    com.blockverse.app.enums.AuditActionType.DOCUMENT_SHARED,
+                    "{\"expiryMinutes\": 60}"
+            );
+        }
+
+        @Test
+        @DisplayName("MEMBER should NOT be able to create share link")
+        void createShareLink_memberDenied() {
+            stubAuthenticatedMember(regularMember);
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+
+            assertThrows(InsufficientPermissionException.class,
+                    () -> documentService.createShareLink(1, 60));
+            verify(documentShareRepo, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("should reject when document does not exist")
+        void createShareLink_notFound() {
+            when(securityUtil.getLoggedInUser()).thenReturn(testUser);
+            when(documentRepo.findById(999)).thenReturn(Optional.empty());
+
+            assertThrows(DocumentNotFoundException.class,
+                    () -> documentService.createShareLink(999, 60));
+        }
+
+        @Test
+        @DisplayName("should reject when user is not a workspace member")
+        void createShareLink_nonMember() {
+            stubAuthenticatedNonMember();
+            when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+
+            assertThrows(InsufficientPermissionException.class,
+                    () -> documentService.createShareLink(1, 60));
+            verify(documentShareRepo, never()).save(any());
         }
     }
 }

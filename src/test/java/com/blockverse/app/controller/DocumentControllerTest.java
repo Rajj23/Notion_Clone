@@ -666,4 +666,48 @@ class DocumentControllerTest {
                                         .andExpect(status().isForbidden());
                 }
         }
+
+        // ========================================================================
+        // POST /v1/documents/{documentId}/share — createShareLink
+        // ========================================================================
+
+        @Nested
+        @DisplayName("POST /v1/documents/{documentId}/share")
+        class CreateShareLinkTests {
+
+                @Test
+                @DisplayName("should return 200 with share link response")
+                void createShareLink_success() throws Exception {
+                        com.blockverse.app.dto.document.ShareLinkResponse response = 
+                                new com.blockverse.app.dto.document.ShareLinkResponse("http://localhost:8080/share/token123", LocalDateTime.now().plusMinutes(60));
+                        when(documentService.createShareLink(eq(1), eq(60))).thenReturn(response);
+
+                        mockMvc.perform(post("/v1/documents/1/share")
+                                        .param("expiryMinutes", "60"))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$.url").value("http://localhost:8080/share/token123"));
+                }
+
+                @Test
+                @DisplayName("should return 403 when user lacks permission")
+                void createShareLink_forbidden() throws Exception {
+                        when(documentService.createShareLink(eq(1), eq(60)))
+                                .thenThrow(new InsufficientPermissionException("Only workspace owners or admin can create share links"));
+
+                        mockMvc.perform(post("/v1/documents/1/share")
+                                        .param("expiryMinutes", "60"))
+                                        .andExpect(status().isForbidden());
+                }
+
+                @Test
+                @DisplayName("should return 404 when document does not exist")
+                void createShareLink_notFound() throws Exception {
+                        when(documentService.createShareLink(eq(999), eq(60)))
+                                .thenThrow(new DocumentNotFoundException("Document not found"));
+
+                        mockMvc.perform(post("/v1/documents/999/share")
+                                        .param("expiryMinutes", "60"))
+                                        .andExpect(status().isNotFound());
+                }
+        }
 }
