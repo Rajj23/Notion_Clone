@@ -32,7 +32,7 @@ public class DocumentShareService {
 
         Document document = share.getDocument();
 
-        List<BlockResponse> blocks = blockService.getBlocksForDocument(document.getId());
+        List<BlockResponse> blocks = blockService.getBlocksForDocumentWithoutAuth(document.getId());
         
         return DocumentDetailsResponse.builder()
                 .document(documentMapper.toResponse(document))

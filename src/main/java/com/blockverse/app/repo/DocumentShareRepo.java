@@ -7,4 +7,5 @@ import java.util.Optional;
 
 public interface DocumentShareRepo extends JpaRepository<DocumentShare, Integer> {
     Optional<DocumentShare> findByTokenAndActiveTrue(String token);
+    void deleteByDocument(com.blockverse.app.entity.Document document);
 }

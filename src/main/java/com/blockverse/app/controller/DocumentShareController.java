@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/v1/share")
+@RequestMapping("/share")
 public class DocumentShareController {
     
     private final DocumentShareService documentShareService;
