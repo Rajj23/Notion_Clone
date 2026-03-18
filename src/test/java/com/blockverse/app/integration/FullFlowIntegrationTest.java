@@ -784,4 +784,51 @@ class FullFlowIntegrationTest {
                                                         .value(org.hamcrest.Matchers.greaterThanOrEqualTo(2)));
                 }
         }
+
+        // ========================================================================
+        // Document Sharing Flow
+        // ========================================================================
+
+        @Nested
+        @DisplayName("Document Sharing Flow")
+        class DocumentSharingFlowTests {
+
+                private String token;
+                private int workspaceId;
+                private int documentId;
+
+                @BeforeEach
+                void setup() throws Exception {
+                        token = signupAndGetToken("ShareOwner", "shareowner@test.com", "secret123");
+                        workspaceId = createWorkspaceAndGetId(token, "Share WS", "PRIVATE");
+                        documentId = createDocumentAndGetId(token, workspaceId, "Share Doc");
+                }
+
+                @Test
+                @DisplayName("should create a share link and allow access without authentication")
+                void createAndAccessShareLink() throws Exception {
+                        // Create block
+                        createBlockAndGetId(token, documentId, null, "PARAGRAPH", "Shared content");
+
+                        // 1. Create Share Link
+                        MvcResult result = mockMvc.perform(post("/v1/documents/" + documentId + "/share")
+                                        .param("expiryMinutes", "60")
+                                        .header("Authorization", "Bearer " + token))
+                                        .andExpect(status().isOk())
+                                        .andReturn();
+                        
+                        String responseBody = result.getResponse().getContentAsString();
+                        String url = JsonPath.read(responseBody, "$.url");
+                        
+                        // Extract token from URL (http://localhost:8080/share/TOKEN)
+                        String shareToken = url.substring(url.lastIndexOf('/') + 1);
+
+                        // 2. Access Shared Document without authentication mapping to /share/{token}
+                        mockMvc.perform(get("/share/" + shareToken))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$.document.title").value("Share Doc"))
+                                        .andExpect(jsonPath("$.blocks", hasSize(1)))
+                                        .andExpect(jsonPath("$.blocks[0].content").value("Shared content"));
+                }
+        }
 }
