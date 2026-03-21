@@ -1,5 +1,6 @@
 package com.blockverse.app.service;
 
+import com.blockverse.app.dto.NotificationEvent;
 import com.blockverse.app.dto.workspaceMember.AddMemberRequest;
 import com.blockverse.app.dto.workspaceMember.ChangeMemberRoleRequest;
 import com.blockverse.app.entity.User;
@@ -8,6 +9,7 @@ import com.blockverse.app.entity.WorkSpaceMember;
 import com.blockverse.app.enums.WorkSpaceRole;
 import com.blockverse.app.exception.InsufficientPermissionException;
 import com.blockverse.app.exception.OwnerLevelException;
+import com.blockverse.app.notification.NotificationService;
 import com.blockverse.app.repo.UserRepo;
 import com.blockverse.app.repo.WorkSpaceMemberRepo;
 import com.blockverse.app.repo.WorkSpaceRepo;
@@ -43,6 +45,9 @@ public class WorkspaceMemberServiceTest {
     
     @Mock
     private AuditLogService auditLogService;
+    
+    @Mock
+    private NotificationService notificationService;
     
     @InjectMocks
     private WorkSpaceMemberService service;
@@ -98,6 +103,7 @@ public class WorkspaceMemberServiceTest {
 
         service.addMemberToWorkSpace(1, request);
         verify(workSpaceMemberRepo).save(any(WorkSpaceMember.class));
+        verify(notificationService).sendNotification(any(NotificationEvent.class));
     }
     
     @Test

@@ -1,5 +1,6 @@
 package com.blockverse.app.service;
 
+import com.blockverse.app.dto.NotificationEvent;
 import com.blockverse.app.dto.block.BlockResponse;
 import com.blockverse.app.dto.document.CreateDocumentRequest;
 import com.blockverse.app.dto.document.DocumentDetailsResponse;
@@ -16,6 +17,7 @@ import com.blockverse.app.exception.DocumentNotFoundException;
 import com.blockverse.app.exception.InsufficientPermissionException;
 import com.blockverse.app.exception.WorkSpaceNotFoundException;
 import com.blockverse.app.mapper.DocumentMapper;
+import com.blockverse.app.notification.NotificationService;
 import com.blockverse.app.repo.DocumentRepo;
 import com.blockverse.app.repo.WorkSpaceMemberRepo;
 import com.blockverse.app.repo.WorkSpaceRepo;
@@ -27,7 +29,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -66,6 +67,8 @@ class DocumentServiceTest {
     private DocumentSocketPublisher documentSocketPublisher;
     @Mock
     private com.blockverse.app.repo.DocumentShareRepo documentShareRepo;
+    @Mock
+    private NotificationService notificationService;
 
     private DocumentService documentService;
 
@@ -80,12 +83,13 @@ class DocumentServiceTest {
     @BeforeEach
     void setUp() {
         documentSocketPublisher = mock(DocumentSocketPublisher.class);
-        documentService = new DocumentService(documentMapper, documentRepo, workSpaceRepo, workSpaceMemberRepo, securityUtil, blockService, auditLogService, blockRepo, blockChangeLogRepo, documentSocketPublisher, documentShareRepo);
+        documentService = new DocumentService(documentMapper, documentRepo, workSpaceRepo, workSpaceMemberRepo, securityUtil, blockService, auditLogService, blockRepo, blockChangeLogRepo, documentSocketPublisher, documentShareRepo, notificationService);
         testUser = User.builder().id(1).name("Test User").email("test@mail.com").build();
+        User adminUser = User.builder().id(2).name("Admin User").email("admin@mail.com").build();
         testWorkSpace = WorkSpace.builder().id(1).name("Test Workspace").build();
         ownerMember = WorkSpaceMember.builder().id(1).user(testUser).workSpace(testWorkSpace).role(WorkSpaceRole.OWNER)
                 .build();
-        adminMember = WorkSpaceMember.builder().id(2).user(testUser).workSpace(testWorkSpace).role(WorkSpaceRole.ADMIN)
+        adminMember = WorkSpaceMember.builder().id(2).user(adminUser).workSpace(testWorkSpace).role(WorkSpaceRole.ADMIN)
                 .build();
         regularMember = WorkSpaceMember.builder().id(3).user(testUser).workSpace(testWorkSpace)
                 .role(WorkSpaceRole.MEMBER).build();
@@ -277,12 +281,15 @@ class DocumentServiceTest {
 
             UpdateDocumentRequest request = new UpdateDocumentRequest();
             request.setTitle("Updated Title");
+            
+            when(workSpaceMemberRepo.findByWorkSpaceAndDeletedAtIsNull(testWorkSpace)).thenReturn(List.of(ownerMember, adminMember));
 
             DocumentResponse response = documentService.updateDocument(1, request);
 
             assertEquals("Updated Title", response.getTitle());
             verify(documentRepo).save(testDocument);
             assertEquals("Updated Title", testDocument.getTitle());
+            verify(notificationService, times(1)).sendBulkNotification(anyList(), anyString(), any(com.blockverse.app.enums.NotificationType.class), anyInt());
         }
 
         @Test
