@@ -1,5 +1,6 @@
 package com.blockverse.app.service;
 
+import com.blockverse.app.dto.NotificationEvent;
 import com.blockverse.app.dto.workspaceMember.AddMemberRequest;
 import com.blockverse.app.dto.workspaceMember.ChangeMemberRoleRequest;
 import com.blockverse.app.entity.User;
@@ -7,8 +8,10 @@ import com.blockverse.app.entity.WorkSpace;
 import com.blockverse.app.entity.WorkSpaceMember;
 import com.blockverse.app.enums.AuditActionType;
 import com.blockverse.app.enums.AuditEntityType;
+import com.blockverse.app.enums.NotificationType;
 import com.blockverse.app.enums.WorkSpaceRole;
 import com.blockverse.app.exception.*;
+import com.blockverse.app.notification.NotificationService;
 import com.blockverse.app.repo.UserRepo;
 import com.blockverse.app.repo.WorkSpaceMemberRepo;
 import com.blockverse.app.repo.WorkSpaceRepo;
@@ -34,6 +37,7 @@ public class WorkSpaceMemberService {
     private final WorkSpaceMemberRepo workSpaceMemberRepo;
     private final SecurityUtil securityUtil;
     private final AuditLogService auditLogService;
+    private final NotificationService notificationService;
 
     
     private WorkSpace getWorkSpaceOrThrow(int workspaceId) {
@@ -82,6 +86,13 @@ public class WorkSpaceMemberService {
                 member.setDeletedAt(null);
                 member.setRole(request.getRole());
                 workSpaceMemberRepo.save(member);
+                notificationService.sendNotification(NotificationEvent.builder()
+                        .userId(user.getId())
+                        .message("You have been re-added to the workspace: " + workSpace.getName() + " with role: " + request.getRole())
+                        .referencedId(workspaceId)
+                        .type(NotificationType.ADD_MEMBER)
+                        .build()
+                );
                 return;
             }
             
@@ -103,6 +114,14 @@ public class WorkSpaceMemberService {
                         .user(user)
                         .role(request.getRole())
                         .build()
+        );
+
+        notificationService.sendNotification(NotificationEvent.builder()
+                .userId(user.getId())
+                .message("You have been added to the workspace: " + workSpace.getName() + " with role: " + request.getRole())
+                .referencedId(workspaceId)
+                .type(NotificationType.ADD_MEMBER)
+                .build()
         );
     }
     
@@ -136,6 +155,14 @@ public class WorkSpaceMemberService {
                 workSpace.getId(),
                 AuditActionType.USER_REMOVED,
                 "{\"removedUserEmail\":\"" + user.getEmail() + "\"}"
+        );
+
+        notificationService.sendNotification(NotificationEvent.builder()
+                .userId(user.getId())
+                .message("You have been removed from the workspace: " + workSpace.getName())
+                .referencedId(workspaceId)
+                .type(NotificationType.REMOVE_MEMBER)
+                .build()
         );
         
         membershipToRemove.setDeletedAt(LocalDateTime.now());
@@ -176,6 +203,14 @@ public class WorkSpaceMemberService {
                 AuditActionType.ROLE_CHANGED,
                 "{\"changedUserEmail\":\"" + user.getEmail() + "\", \"newRole\":\"" + request.getRole() + "\"}"
         );
+
+        notificationService.sendNotification(NotificationEvent.builder()
+                .userId(user.getId())
+                .message("Your role in the workspace: " + workSpace.getName() + " has been changed to: " + request.getRole())
+                .referencedId(workspaceId)
+                .type(NotificationType.ROLE_CHANGE)
+                .build()
+        );
         
         membershipToChange.setRole(request.getRole());
         workSpaceMemberRepo.save(membershipToChange);
@@ -199,6 +234,17 @@ public class WorkSpaceMemberService {
                     AuditActionType.USER_LEFT,
                     "{\"leftUserEmail\":\"" + user.getEmail() + "\"}"
             );
+
+        workSpaceMemberRepo.findByWorkSpaceAndDeletedAtIsNull(workSpace).stream()
+                .filter(m -> m.getRole() == OWNER)
+                .findFirst()
+                .ifPresent(owner -> notificationService.sendNotification(NotificationEvent.builder()
+                        .userId(owner.getUser().getId())
+                        .message(user.getEmail() + " has left the workspace: " + workSpace.getName())
+                        .referencedId(workspaceId)
+                        .type(NotificationType.LEAVE)
+                        .build()
+                ));
         
         currentUserMembership.setDeletedAt(LocalDateTime.now());
         workSpaceMemberRepo.save(currentUserMembership);
@@ -235,6 +281,14 @@ public class WorkSpaceMemberService {
                         AuditActionType.WORKSPACE_OWNERSHIP_TRANSFERRED,
                         "{\"newOwnerEmail\":\"" + newOwnerEmail + "\"}"
                 );
+
+        notificationService.sendNotification(NotificationEvent.builder()
+                .userId(newOwner.getId())
+                .message("You are now the owner of the workspace: " + workSpace.getName())
+                .referencedId(workspaceId)
+                .type(NotificationType.TRANSFER_OWNERSHIP)
+                .build()
+        );     
 
         workSpaceMemberRepo.save(newOwnerMembership);
         workSpaceMemberRepo.save(currentUserMembership);

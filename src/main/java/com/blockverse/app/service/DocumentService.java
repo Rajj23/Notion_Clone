@@ -1,17 +1,17 @@
 package com.blockverse.app.service;
 
+
+
 import com.blockverse.app.dto.block.BlockResponse;
 import com.blockverse.app.dto.document.*;
 import com.blockverse.app.entity.*;
-import com.blockverse.app.enums.AuditActionType;
-import com.blockverse.app.enums.AuditEntityType;
-import com.blockverse.app.enums.DocumentOperationType;
-import com.blockverse.app.enums.WorkSpaceRole;
+import com.blockverse.app.enums.*;
 import com.blockverse.app.exception.DocumentException;
 import com.blockverse.app.exception.DocumentNotFoundException;
 import com.blockverse.app.exception.InsufficientPermissionException;
 import com.blockverse.app.exception.WorkSpaceNotFoundException;
 import com.blockverse.app.mapper.DocumentMapper;
+import com.blockverse.app.notification.NotificationService;
 import com.blockverse.app.repo.*;
 import com.blockverse.app.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +38,7 @@ public class DocumentService {
     private final BlockChangeLogRepo blockChangeLogRepo;
     private final DocumentSocketPublisher documentSocketPublisher;
     private final DocumentShareRepo documentShareRepo;
+    private final NotificationService notificationService;
     
     private String generateToken(){
         return UUID.randomUUID().toString();
@@ -91,6 +92,16 @@ public class DocumentService {
                         document.getId()
                 )
         );
+
+        List<Integer> recipientIds = workSpaceMemberRepo.findByWorkSpaceAndDeletedAtIsNull(workSpace)
+                .stream()
+                .map(wsm -> wsm.getUser().getId())
+                .filter(id -> id != currentUser.getId())
+                .toList();
+        notificationService.sendBulkNotification(recipientIds,
+                "New document created: " + document.getTitle(),
+                NotificationType.CREATE,
+                document.getId());
 
         return documentMapper.toResponse(document);
     }
@@ -156,6 +167,16 @@ public class DocumentService {
                 )
         );
 
+        List<Integer> recipientIds = workSpaceMemberRepo.findByWorkSpaceAndDeletedAtIsNull(document.getWorkSpace())
+                .stream()
+                .map(wsm -> wsm.getUser().getId())
+                .filter(id -> id != user.getId())
+                .toList();
+        notificationService.sendBulkNotification(recipientIds,
+                "Document updated: " + document.getTitle(),
+                NotificationType.UPDATE,
+                documentId);
+
         return documentMapper.toResponse(document);
     }
 
@@ -203,7 +224,17 @@ public class DocumentService {
                         document.getId()
                 )
         );
-        
+
+        List<Integer> recipientIds = workSpaceMemberRepo.findByWorkSpaceAndDeletedAtIsNull(document.getWorkSpace())
+                .stream()
+                .map(wsm -> wsm.getUser().getId())
+                .filter(id -> id != user.getId())
+                .toList();
+        notificationService.sendBulkNotification(recipientIds,
+                "Document archived: " + document.getTitle(),
+                NotificationType.ARCHIVE,
+                documentId);
+
         document.setArchived(true);
         documentRepo.save(document);
     }
@@ -237,7 +268,17 @@ public class DocumentService {
                         document.getId()
                 )
         );
-        
+
+        List<Integer> recipientIds = workSpaceMemberRepo.findByWorkSpaceAndDeletedAtIsNull(document.getWorkSpace())
+                .stream()
+                .map(wsm -> wsm.getUser().getId())
+                .filter(id -> id != user.getId())
+                .toList();
+        notificationService.sendBulkNotification(recipientIds,
+                "Document unarchived: " + document.getTitle(),
+                NotificationType.UNARCHIVE,
+                documentId);
+
         document.setArchived(false);
         documentRepo.save(document);
     }
@@ -274,7 +315,17 @@ public class DocumentService {
                         document.getId()
                 )
         );
-        
+
+        List<Integer> recipientIds = workSpaceMemberRepo.findByWorkSpaceAndDeletedAtIsNull(document.getWorkSpace())
+                .stream()
+                .map(wsm -> wsm.getUser().getId())
+                .filter(id -> id != user.getId())
+                .toList();
+        notificationService.sendBulkNotification(recipientIds,
+                "Document moved to trash: " + document.getTitle(),
+                NotificationType.DELETE,
+                documentId);
+
         document.setDeleted(true);
         document.setDeletedAt(LocalDateTime.now());
         document.setDeletedBy(user.getId());
@@ -311,6 +362,16 @@ public class DocumentService {
                 )
         );
 
+        List<Integer> recipientIds = workSpaceMemberRepo.findByWorkSpaceAndDeletedAtIsNull(document.getWorkSpace())
+                .stream()
+                .map(wsm -> wsm.getUser().getId())
+                .filter(id -> id != user.getId())
+                .toList();
+        notificationService.sendBulkNotification(recipientIds,
+                "Document restored from trash: " + document.getTitle(),
+                NotificationType.RESTORE,
+                documentId);
+
         document.setDeleted(false);
         document.setDeletedAt(null);
         document.setDeletedBy(null);
@@ -339,6 +400,12 @@ public class DocumentService {
                 "Document permanently deleted with title: " + document.getTitle()
         );
 
+        List<Integer> recipientIds = workSpaceMemberRepo.findByWorkSpaceAndDeletedAtIsNull(document.getWorkSpace())
+                .stream()
+                .map(wsm -> wsm.getUser().getId())
+                .filter(id -> id != user.getId())
+                .toList();
+
         documentSocketPublisher.broadcast(
                 document.getId(),
                 new DocumentEvent(
@@ -348,6 +415,11 @@ public class DocumentService {
                         document.getId()
                 )
         );
+
+        notificationService.sendBulkNotification(recipientIds,
+                "Document permanently deleted: " + document.getTitle(),
+                NotificationType.PERMANENT_DELETE,
+                documentId);
 
         blockChangeLogRepo.deleteByDocument(document);
         documentShareRepo.deleteByDocument(document);
@@ -388,16 +460,26 @@ public class DocumentService {
                 .active(true)
                 .build();
         
-         documentShareRepo.save(share);
+        documentShareRepo.save(share);
 
-         auditLogService.auditLog(
-            document.getWorkSpace().getId(),
-            user.getId(),
-            AuditEntityType.DOCUMENT,
-            document.getId(),
-            AuditActionType.DOCUMENT_SHARED,
-            "{\"expiryMinutes\": " + expiryMinutes + "}"
-);
+        auditLogService.auditLog(
+                document.getWorkSpace().getId(),
+                user.getId(),
+                AuditEntityType.DOCUMENT,
+                document.getId(),
+                AuditActionType.DOCUMENT_SHARED,
+                "{\"expiryMinutes\": " + expiryMinutes + "}"
+        );
+
+        List<Integer> recipientIds = workSpaceMemberRepo.findByWorkSpaceAndDeletedAtIsNull(document.getWorkSpace())
+                .stream()
+                .map(wsm -> wsm.getUser().getId())
+                .filter(id -> id != user.getId())
+                .toList();
+        notificationService.sendBulkNotification(recipientIds,
+                "A share link was created for document: " + document.getTitle(),
+                NotificationType.SHARE,
+                documentId);
 
         return new ShareLinkResponse("http://localhost:8080/share/" + token,
                 expiryTime);

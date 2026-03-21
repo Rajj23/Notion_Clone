@@ -86,4 +86,6 @@ public interface WorkSpaceMemberRepo extends JpaRepository<WorkSpaceMember, Inte
     List<WorkSpaceDetailsResponse> findWorkspaceDetailsForUserAndDeletedAtIsNull(User user);
 
     int countByWorkSpaceIdAndDeletedAtIsNull(int workSpaceId);
+
+    List<WorkSpaceMember> findByWorkSpaceAndDeletedAtIsNull(WorkSpace workSpace);
 }
