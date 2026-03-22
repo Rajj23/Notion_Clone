@@ -36,6 +36,9 @@ class SearchServiceTest {
     
     @Mock
     private DocumentMapper documentMapper;
+    
+    @Mock
+    private com.blockverse.app.mapper.BlockMapper blockMapper;
 
     @InjectMocks
     private SearchService searchService;
@@ -60,6 +63,9 @@ class SearchServiceTest {
         when(documentRepo.searchDocuments("Keyword", 1)).thenReturn(List.of(testDocument));
         when(blockRepo.searchBlocks("Keyword", 1)).thenReturn(List.of(testBlock));
         when(documentMapper.toResponse(testDocument)).thenReturn(testDocResponse);
+        
+        BlockResponse blockResponse = BlockResponse.builder().id(1).content("Keyword content").build();
+        when(blockMapper.toBlockResponse(testBlock)).thenReturn(blockResponse);
 
         SearchResponse response = searchService.search("Keyword", 1);
 

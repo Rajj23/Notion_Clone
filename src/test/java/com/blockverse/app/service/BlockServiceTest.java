@@ -46,7 +46,11 @@ class BlockServiceTest {
     @Mock
     private AuditLogService auditLogService;
     @Mock
+    private S3Service s3Service;
+    @Mock
     private DocumentSocketPublisher documentSocketPublisher;
+    
+    private com.blockverse.app.mapper.BlockMapper blockMapper;
 
     private BlockService blockService;
 
@@ -59,7 +63,9 @@ class BlockServiceTest {
     @BeforeEach
     void setUp() {
         documentSocketPublisher = mock(DocumentSocketPublisher.class);
-        blockService = new BlockService(documentRepo, workSpaceMemberRepo, securityUtil, blockRepo, blockChangeLogRepo, auditLogService, documentSocketPublisher);
+        s3Service = mock(S3Service.class);
+        blockMapper = new com.blockverse.app.mapper.BlockMapper(s3Service);
+        blockService = new BlockService(documentRepo, workSpaceMemberRepo, securityUtil, blockRepo, blockChangeLogRepo, auditLogService, documentSocketPublisher, blockMapper);
         testUser = User.builder().id(1).name("Test User").email("test@mail.com").build();
         testWorkSpace = WorkSpace.builder().id(1).name("Test Workspace").build();
         testMember = WorkSpaceMember.builder().id(1).user(testUser).workSpace(testWorkSpace).build();
@@ -231,8 +237,6 @@ class BlockServiceTest {
             stubAuthenticatedMember();
             testDocument.setVersion(5L);
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
-            when(blockRepo.findByDocumentAndParentAndDeletedFalseOrderByPositionAsc(testDocument, null))
-                    .thenReturn(List.of());
 
             CreateBlockRequest request = new CreateBlockRequest(null, BlockType.PARAGRAPH, "x", 3L);
 
