@@ -27,6 +27,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleNotWorkSpaceMember(NotWorkSpaceMemberException ex) {
         return buildError(HttpStatus.FORBIDDEN, ex.getMessage());
     }
+    
+    @ExceptionHandler(S3FileUploadException.class)
+    public ResponseEntity<ErrorResponse> S3FileUploadException(S3FileUploadException ex) {
+        return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to upload file to S3");
+    }
 
     @ExceptionHandler(UserNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleUserNotFound(UserNotFoundException ex) {

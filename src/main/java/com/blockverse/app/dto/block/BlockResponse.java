@@ -21,6 +21,7 @@ public class BlockResponse {
     private Integer parentId;
     private BlockType type;
     private String content;
+    private String fileUrl;
     private BigInteger position;
     private List<BlockResponse> children;
 

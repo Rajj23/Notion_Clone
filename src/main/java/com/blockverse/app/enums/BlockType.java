@@ -8,4 +8,5 @@ public enum BlockType {
     BULLET,
     NUMBERED,
     CODE,
+    IMAGE,
 }

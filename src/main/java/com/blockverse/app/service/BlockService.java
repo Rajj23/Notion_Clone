@@ -3,10 +3,7 @@ package com.blockverse.app.service;
 import com.blockverse.app.dto.block.*;
 import com.blockverse.app.dto.document.DocumentEvent;
 import com.blockverse.app.entity.*;
-import com.blockverse.app.enums.AuditActionType;
-import com.blockverse.app.enums.AuditEntityType;
-import com.blockverse.app.enums.BlockOperationType;
-import com.blockverse.app.enums.DocumentOperationType;
+import com.blockverse.app.enums.*;
 import com.blockverse.app.exception.*;
 import com.blockverse.app.mapper.BlockMapper;
 import com.blockverse.app.repo.*;
@@ -34,6 +31,7 @@ public class BlockService {
     private final BlockChangeLogRepo blockChangeLogRepo;
     private final AuditLogService auditLogService;
     private final DocumentSocketPublisher documentSocketPublisher;
+    private final BlockMapper blockMapper;
 
     private Document getDocumentOrThrow(int documentId) {
         return documentRepo.findById(documentId)
@@ -133,8 +131,18 @@ public class BlockService {
             block.setParent(parent);
         }
 
-        block.setContent(request.getContent());
+        checkConflict(document, request.getDocumentVersion());
+        
         block.setType(request.getType());
+        if(request.getType() == BlockType.IMAGE){
+            if(request.getContent() == null || request.getContent().isBlank()){
+                throw new BlockLevelException("Image block must have content");
+            }
+            block.setContent(request.getContent());
+        }
+        else{
+            block.setContent(request.getContent());
+        }
 
         BigInteger position = BigInteger.valueOf(10000);
         List<Block> siblings = blockRepo.findByDocumentAndParentAndDeletedFalseOrderByPositionAsc(document, parent);
@@ -145,8 +153,6 @@ public class BlockService {
         }
         block.setPosition(position);
 
-        checkConflict(document, request.getDocumentVersion());
-
         Block savedBlock = blockRepo.save(block);
 
         auditLogService.auditLog(document.getWorkSpace().getId(),
@@ -155,8 +161,8 @@ public class BlockService {
                 savedBlock.getId(),
                 AuditActionType.BLOCK_CREATED,
                 "{\"documentId\": "+ document.getId() + "}"
-                );
-               
+        );
+
 
         logChange(document, savedBlock,
                 BlockOperationType.CREATE,
@@ -168,7 +174,7 @@ public class BlockService {
                 null,
                 currentUser);
 
-        BlockResponse blockResponse = BlockMapper.toBlockResponse(savedBlock);
+        BlockResponse blockResponse = blockMapper.toBlockResponse(savedBlock);
 
         documentSocketPublisher.broadcast(
                 document.getId(),
@@ -179,7 +185,7 @@ public class BlockService {
                         blockResponse
                 )
         );
-        
+
         return blockResponse;
     }
 
@@ -204,7 +210,7 @@ public class BlockService {
         List<BlockResponse> roots = new ArrayList<>();
 
         for(Block block : blocks){
-            map.put(block.getId(), BlockMapper.toBlockResponse(block));
+            map.put(block.getId(), blockMapper.toBlockResponse(block));
         }
 
         for(Block block : blocks){
@@ -261,7 +267,7 @@ public class BlockService {
                 "{\"documentId\": "+ document.getId() + "}"
         );
 
-        BlockResponse blockResponse = BlockMapper.toBlockResponse(updatedBlock);
+        BlockResponse blockResponse = blockMapper.toBlockResponse(updatedBlock);
 
         documentSocketPublisher.broadcast(
                 document.getId(),
@@ -279,6 +285,10 @@ public class BlockService {
     public void deleteBlock(int blockId, DeleteBlockRequest request) {
         User currentUser = securityUtil.getLoggedInUser();
         Block block = getBlockOrThrow(blockId);
+
+        if(block.isDeleted()){
+            throw new BlockLevelException("Block already deleted");
+        }
 
         Document document = block.getDocument();
         checkActiveDocument(document);
@@ -315,7 +325,7 @@ public class BlockService {
                         document.getId(),
                         AuditEntityType.BLOCK,
                         BlockOperationType.DELETE,
-                        BlockMapper.toBlockResponse(block)
+                        blockMapper.toBlockResponse(block)
                 )
         );
 
@@ -332,7 +342,7 @@ public class BlockService {
         List<Block> children = blockRepo.findByParentAndDeletedFalseOrderByPositionAsc(parent);
 
         return children.stream()
-                .map(BlockMapper::toBlockResponse)
+                .map(blockMapper::toBlockResponse)
                 .toList();
     }
 
@@ -382,7 +392,7 @@ public class BlockService {
         );
 
         Block savedBlock = blockRepo.save(block);
-        BlockResponse blockResponse = BlockMapper.toBlockResponse(savedBlock);
+        BlockResponse blockResponse = blockMapper.toBlockResponse(savedBlock);
 
         documentSocketPublisher.broadcast(
                 document.getId(),
