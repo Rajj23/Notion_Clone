@@ -71,6 +71,13 @@ class S3ServiceTest {
     }
 
     @Test
+    void uploadFile_exceedsSizeLimit() {
+        MockMultipartFile file = new MockMultipartFile("file", "large.txt", "text/plain", new byte[6 * 1024 * 1024]);
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> s3Service.uploadFile(file));
+        assertEquals("File size exceeds 5MB limit", exception.getMessage());
+    }
+
+    @Test
     void generateUrl_success() throws Exception {
         String key = "test-key.txt";
         String expectedUrl = "https://test-bucket.s3.amazonaws.com/test-key.txt";

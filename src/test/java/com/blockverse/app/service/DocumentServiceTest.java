@@ -15,6 +15,7 @@ import com.blockverse.app.enums.WorkSpaceRole;
 import com.blockverse.app.exception.DocumentException;
 import com.blockverse.app.exception.DocumentNotFoundException;
 import com.blockverse.app.exception.InsufficientPermissionException;
+import com.blockverse.app.exception.TooManyRequestsException;
 import com.blockverse.app.exception.WorkSpaceNotFoundException;
 import com.blockverse.app.mapper.DocumentMapper;
 import com.blockverse.app.notification.NotificationService;
@@ -69,6 +70,8 @@ class DocumentServiceTest {
     private com.blockverse.app.repo.DocumentShareRepo documentShareRepo;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private RateLimiterService rateLimiterService;
 
     private DocumentService documentService;
 
@@ -83,7 +86,7 @@ class DocumentServiceTest {
     @BeforeEach
     void setUp() {
         documentSocketPublisher = mock(DocumentSocketPublisher.class);
-        documentService = new DocumentService(documentMapper, documentRepo, workSpaceRepo, workSpaceMemberRepo, securityUtil, blockService, auditLogService, blockRepo, blockChangeLogRepo, documentSocketPublisher, documentShareRepo, notificationService);
+        documentService = new DocumentService(documentMapper, documentRepo, workSpaceRepo, workSpaceMemberRepo, securityUtil, blockService, auditLogService, blockRepo, blockChangeLogRepo, documentSocketPublisher, documentShareRepo, notificationService, rateLimiterService);
         testUser = User.builder().id(1).name("Test User").email("test@mail.com").build();
         User adminUser = User.builder().id(2).name("Admin User").email("admin@mail.com").build();
         testWorkSpace = WorkSpace.builder().id(1).name("Test Workspace").build();
@@ -104,12 +107,20 @@ class DocumentServiceTest {
         when(securityUtil.getLoggedInUser()).thenReturn(testUser);
         when(workSpaceMemberRepo.findByUserAndWorkSpaceAndDeletedAtIsNull(testUser, testWorkSpace))
                 .thenReturn(Optional.of(member));
+        lenient().doNothing().when(rateLimiterService).checkRateLimit(anyInt(), anyString());
     }
 
     private void stubAuthenticatedNonMember() {
         when(securityUtil.getLoggedInUser()).thenReturn(testUser);
         when(workSpaceMemberRepo.findByUserAndWorkSpaceAndDeletedAtIsNull(testUser, testWorkSpace))
                 .thenReturn(Optional.empty());
+        lenient().doNothing().when(rateLimiterService).checkRateLimit(anyInt(), anyString());
+    }
+
+    private void stubRateLimitExceeded(String action) {
+        when(securityUtil.getLoggedInUser()).thenReturn(testUser);
+        doThrow(new TooManyRequestsException("Too many requests"))
+                .when(rateLimiterService).checkRateLimit(testUser.getId(), action);
     }
 
     // ========================================================================
@@ -962,10 +973,100 @@ class DocumentServiceTest {
         @Test
         @DisplayName("should reject when user is not a workspace member")
         void createShareLink_nonMember() {
-            stubAuthenticatedNonMember();
+            when(securityUtil.getLoggedInUser()).thenReturn(testUser);
+            doNothing().when(rateLimiterService).checkRateLimit(anyInt(), anyString());
             when(documentRepo.findById(1)).thenReturn(Optional.of(testDocument));
+            when(workSpaceMemberRepo.findByUserAndWorkSpaceAndDeletedAtIsNull(testUser, testWorkSpace))
+                    .thenReturn(Optional.empty());
 
             assertThrows(InsufficientPermissionException.class,
+                    () -> documentService.createShareLink(1, 60));
+            verify(documentShareRepo, never()).save(any());
+        }
+    }
+
+    // ========================================================================
+    // Rate Limiting
+    // ========================================================================
+
+    @Nested
+    @DisplayName("rateLimiting")
+    class RateLimitingTests {
+
+        @Test
+        @DisplayName("createDocument — must throw TooManyRequestsException when rate limit exceeded")
+        void createDocument_rateLimitExceeded() {
+            stubRateLimitExceeded("CREATE_DOCUMENT");
+
+            assertThrows(TooManyRequestsException.class,
+                    () -> documentService.createDocument(1, new CreateDocumentRequest("x")));
+            verify(documentRepo, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("updateDocument — must throw TooManyRequestsException when rate limit exceeded")
+        void updateDocument_rateLimitExceeded() {
+            stubRateLimitExceeded("UPDATE_DOCUMENT");
+
+            UpdateDocumentRequest request = new UpdateDocumentRequest();
+            request.setTitle("New Title");
+            assertThrows(TooManyRequestsException.class,
+                    () -> documentService.updateDocument(1, request));
+            verify(documentRepo, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("archiveDocument — must throw TooManyRequestsException when rate limit exceeded")
+        void archiveDocument_rateLimitExceeded() {
+            stubRateLimitExceeded("ARCHIVE_DOCUMENT");
+
+            assertThrows(TooManyRequestsException.class,
+                    () -> documentService.archiveDocument(1));
+        }
+
+        @Test
+        @DisplayName("unarchiveDocument — must throw TooManyRequestsException when rate limit exceeded")
+        void unarchiveDocument_rateLimitExceeded() {
+            stubRateLimitExceeded("UNARCHIVE_DOCUMENT");
+
+            assertThrows(TooManyRequestsException.class,
+                    () -> documentService.unarchiveDocument(1));
+        }
+
+        @Test
+        @DisplayName("deleteDocument — must throw TooManyRequestsException when rate limit exceeded")
+        void deleteDocument_rateLimitExceeded() {
+            stubRateLimitExceeded("DELETE_DOCUMENT");
+
+            assertThrows(TooManyRequestsException.class,
+                    () -> documentService.deleteDocument(1));
+        }
+
+        @Test
+        @DisplayName("restoreDeletedDocument — must throw TooManyRequestsException when rate limit exceeded")
+        void restoreDeletedDocument_rateLimitExceeded() {
+            stubRateLimitExceeded("RESTORE_DOCUMENT");
+
+            assertThrows(TooManyRequestsException.class,
+                    () -> documentService.restoreDeletedDocument(1));
+        }
+
+        @Test
+        @DisplayName("permanentDeleteDocument — must throw TooManyRequestsException when rate limit exceeded")
+        void permanentDeleteDocument_rateLimitExceeded() {
+            stubRateLimitExceeded("PERMANENT_DELETE_DOCUMENT");
+
+            assertThrows(TooManyRequestsException.class,
+                    () -> documentService.permanentDeleteDocument(1));
+            verify(documentRepo, never()).delete(any());
+        }
+
+        @Test
+        @DisplayName("createShareLink — must throw TooManyRequestsException when rate limit exceeded")
+        void createShareLink_rateLimitExceeded() {
+            stubRateLimitExceeded("CREATE_SHARE_LINK");
+
+            assertThrows(TooManyRequestsException.class,
                     () -> documentService.createShareLink(1, 60));
             verify(documentShareRepo, never()).save(any());
         }

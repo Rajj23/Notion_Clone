@@ -57,10 +57,9 @@ public class NotificationIntegrationTest {
     @BeforeEach
     public void setup() {
         notificationRepo.deleteAll();
-
-        testUser = userRepo.findByEmail("notify@test.com")
-                .orElseGet(() -> userRepo.save(
-                        User.builder().email("notify@test.com").password("pass").name("Notify").build()));
+        String uniqueEmail = "notify-" + java.util.UUID.randomUUID() + "@test.com";
+        testUser = userRepo.save(
+                User.builder().email(uniqueEmail).password("pass").name("Notify").build());
     }
 
     @Test

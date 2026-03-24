@@ -17,7 +17,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -49,7 +48,9 @@ class BlockServiceTest {
     private S3Service s3Service;
     @Mock
     private DocumentSocketPublisher documentSocketPublisher;
-    
+    @Mock
+    private RateLimiterService rateLimiterService;
+
     private com.blockverse.app.mapper.BlockMapper blockMapper;
 
     private BlockService blockService;
@@ -65,7 +66,7 @@ class BlockServiceTest {
         documentSocketPublisher = mock(DocumentSocketPublisher.class);
         s3Service = mock(S3Service.class);
         blockMapper = new com.blockverse.app.mapper.BlockMapper(s3Service);
-        blockService = new BlockService(documentRepo, workSpaceMemberRepo, securityUtil, blockRepo, blockChangeLogRepo, auditLogService, documentSocketPublisher, blockMapper);
+        blockService = new BlockService(documentRepo, workSpaceMemberRepo, securityUtil, blockRepo, blockChangeLogRepo, auditLogService, documentSocketPublisher, blockMapper, rateLimiterService);
         testUser = User.builder().id(1).name("Test User").email("test@mail.com").build();
         testWorkSpace = WorkSpace.builder().id(1).name("Test Workspace").build();
         testMember = WorkSpaceMember.builder().id(1).user(testUser).workSpace(testWorkSpace).build();
@@ -85,17 +86,25 @@ class BlockServiceTest {
         when(securityUtil.getLoggedInUser()).thenReturn(testUser);
         when(workSpaceMemberRepo.findByUserAndWorkSpaceAndDeletedAtIsNull(testUser, testWorkSpace))
                 .thenReturn(Optional.of(testMember));
+        lenient().doNothing().when(rateLimiterService).checkRateLimit(anyInt(), anyString());
     }
 
     private void stubAuthenticatedNonMember() {
         when(securityUtil.getLoggedInUser()).thenReturn(testUser);
         when(workSpaceMemberRepo.findByUserAndWorkSpaceAndDeletedAtIsNull(testUser, testWorkSpace))
                 .thenReturn(Optional.empty());
+        lenient().doNothing().when(rateLimiterService).checkRateLimit(anyInt(), anyString());
     }
 
     private void stubChangeLogDependencies() {
         when(documentRepo.saveAndFlush(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
         when(blockChangeLogRepo.save(any(BlockChangeLog.class))).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    private void stubRateLimitExceeded(String action) {
+        when(securityUtil.getLoggedInUser()).thenReturn(testUser);
+        doThrow(new TooManyRequestsException("Too many requests"))
+                .when(rateLimiterService).checkRateLimit(testUser.getId(), action);
     }
 
     // ========================================================================
@@ -1022,6 +1031,68 @@ class BlockServiceTest {
 
             assertThrows(DocumentNotFoundException.class,
                     () -> blockService.getDocumentHistory(999));
+        }
+    }
+
+    // ========================================================================
+    // Rate Limiting
+    // ========================================================================
+
+    @Nested
+    @DisplayName("rateLimiting")
+    class RateLimitingTests {
+
+        @Test
+        @DisplayName("createBlock — must throw TooManyRequestsException when rate limit exceeded")
+        void createBlock_rateLimitExceeded() {
+            stubRateLimitExceeded("CREATE_BLOCK");
+
+            CreateBlockRequest request = new CreateBlockRequest(null, BlockType.PARAGRAPH, "x", null);
+            assertThrows(TooManyRequestsException.class, () -> blockService.createBlock(1, request));
+            verify(blockRepo, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("updateBlock — must throw TooManyRequestsException when rate limit exceeded")
+        void updateBlock_rateLimitExceeded() {
+            stubRateLimitExceeded("UPDATE_BLOCK");
+
+            UpdateBlockRequest request = UpdateBlockRequest.builder()
+                    .type(BlockType.PARAGRAPH).content("x").build();
+            assertThrows(TooManyRequestsException.class, () -> blockService.updateBlock(1, request));
+            verify(blockRepo, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("deleteBlock — must throw TooManyRequestsException when rate limit exceeded")
+        void deleteBlock_rateLimitExceeded() {
+            stubRateLimitExceeded("DELETE_BLOCK");
+
+            DeleteBlockRequest request = new DeleteBlockRequest(null);
+            assertThrows(TooManyRequestsException.class, () -> blockService.deleteBlock(1, request));
+            verify(blockRepo, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("moveBlock — must throw TooManyRequestsException when rate limit exceeded")
+        void moveBlock_rateLimitExceeded() {
+            stubRateLimitExceeded("MOVE_BLOCK");
+
+            MoveBlockRequest request = new MoveBlockRequest();
+            request.setNewParentId(null);
+            request.setNewPosition(BigInteger.valueOf(10000));
+            assertThrows(TooManyRequestsException.class, () -> blockService.moveBlock(1, request));
+            verify(blockRepo, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("restoreDocumentVersion — must throw TooManyRequestsException when rate limit exceeded")
+        void restoreDocumentVersion_rateLimitExceeded() {
+            stubRateLimitExceeded("RESTORE_DOCUMENT");
+
+            RestoreDocumentVersionRequest request = new RestoreDocumentVersionRequest(1L);
+            assertThrows(TooManyRequestsException.class, () -> blockService.restoreDocumentVersion(1, request));
+            verify(blockRepo, never()).save(any());
         }
     }
 }

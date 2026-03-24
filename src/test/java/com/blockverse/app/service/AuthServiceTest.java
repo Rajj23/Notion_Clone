@@ -3,9 +3,12 @@ package com.blockverse.app.service;
 import com.blockverse.app.dto.security.*;
 import com.blockverse.app.entity.User;
 import com.blockverse.app.exception.InvalidTokenException;
+import com.blockverse.app.exception.TooManyRequestsException;
 import com.blockverse.app.repo.UserRepo;
 import com.blockverse.app.security.AuthService;
 import com.blockverse.app.security.JwtUtil;
+import com.blockverse.app.service.RateLimiterService;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -21,8 +24,9 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 public class AuthServiceTest {
@@ -35,6 +39,9 @@ public class AuthServiceTest {
     
     @Mock
     private UserRepo userRepo;
+
+    @Mock
+    private RateLimiterService rateLimiterService;
     
     @InjectMocks
     private AuthService authService;
@@ -160,5 +167,40 @@ public class AuthServiceTest {
         
         verify(userRepo).save(user);
     }
-}
-    
+
+    // ========================================================================
+    // Rate Limiting
+    // ========================================================================
+
+    @Nested
+    class RateLimitingTests {
+
+        @Test
+        void login_rateLimitExceeded_shouldThrowTooManyRequestsException() {
+            LoginRequestDTO requestDTO = new LoginRequestDTO("aspen@gmail.com", "12345678a");
+            User user = User.builder().id(1).email("aspen@gmail.com").password("encodedPassword").build();
+            Authentication authentication = new UsernamePasswordAuthenticationToken(user, null);
+
+            when(authenticationManager.authenticate(any())).thenReturn(authentication);
+            doThrow(new TooManyRequestsException("Too many requests"))
+                    .when(rateLimiterService).checkRateLimit(user.getId(), "USER_LOGIN");
+
+            assertThrows(TooManyRequestsException.class, () -> authService.login(requestDTO));
+            verify(userRepo, never()).save(any());
+        }
+
+        @Test
+        void signup_rateLimitExceeded_shouldThrowTooManyRequestsException() {
+            SignupRequestDTO requestDTO = new SignupRequestDTO("Aspen", "aspen@gmail.com", "12345678a");
+            User savedUser = User.builder().id(1).name("Aspen").email("aspen@gmail.com").build();
+
+            when(userRepo.findByEmail("aspen@gmail.com")).thenReturn(Optional.empty());
+            when(userRepo.save(any(User.class))).thenReturn(savedUser);
+            when(passwordEncoder.encode(any())).thenReturn("encodedPassword");
+            doThrow(new TooManyRequestsException("Too many requests"))
+                    .when(rateLimiterService).checkRateLimit(savedUser.getId(), "USER_SIGNUP");
+
+            assertThrows(TooManyRequestsException.class, () -> authService.signup(requestDTO));
+        }
+    }
+}

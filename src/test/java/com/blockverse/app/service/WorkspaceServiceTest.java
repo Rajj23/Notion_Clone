@@ -9,10 +9,12 @@ import com.blockverse.app.entity.WorkSpaceMember;
 import com.blockverse.app.enums.WorkSpaceRole;
 import com.blockverse.app.enums.WorkSpaceType;
 import com.blockverse.app.exception.InsufficientPermissionException;
+import com.blockverse.app.exception.TooManyRequestsException;
 import com.blockverse.app.repo.UserRepo;
 import com.blockverse.app.repo.WorkSpaceMemberRepo;
 import com.blockverse.app.repo.WorkSpaceRepo;
 import com.blockverse.app.security.SecurityUtil;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -24,8 +26,9 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 public class WorkspaceServiceTest {
@@ -44,6 +47,9 @@ public class WorkspaceServiceTest {
     
     @Mock
     private AuditLogService auditLogService;
+
+    @Mock
+    private RateLimiterService rateLimiterService;
     
     @InjectMocks
     private WorkSpaceService workSpaceService;
@@ -142,5 +148,47 @@ public class WorkspaceServiceTest {
         List<WorkSpaceDetailsResponse> result = workSpaceService.getAllWorkSpacesForUser();
         
         assertEquals(1, result.size());
+    }
+
+    // ========================================================================
+    // Rate Limiting
+    // ========================================================================
+
+    @Nested
+    class RateLimitingTests {
+
+        @Test
+        void createWorkspace_rateLimitExceeded_shouldThrowTooManyRequestsException() {
+            User user = User.builder().id(1).build();
+            when(securityUtil.getLoggedInUser()).thenReturn(user);
+            doThrow(new TooManyRequestsException("Too many requests"))
+                    .when(rateLimiterService).checkRateLimit(user.getId(), "WORKSPACE_CREATE");
+
+            WorkSpaceCreateRequest request = new WorkSpaceCreateRequest("MySpace", WorkSpaceType.PRIVATE);
+            assertThrows(TooManyRequestsException.class, () -> workSpaceService.createWorkSpace(request));
+            verify(workSpaceRepo, never()).save(any());
+        }
+
+        @Test
+        void deleteWorkspace_rateLimitExceeded_shouldThrowTooManyRequestsException() {
+            User user = User.builder().id(1).build();
+            WorkSpace workspace = WorkSpace.builder().id(10).build();
+            when(securityUtil.getLoggedInUser()).thenReturn(user);
+            doThrow(new TooManyRequestsException("Too many requests"))
+                    .when(rateLimiterService).checkRateLimit(user.getId(), "WORKSPACE_DELETE");
+
+            assertThrows(TooManyRequestsException.class, () -> workSpaceService.deleteWorkSpace(10));
+        }
+
+        @Test
+        void updateWorkspace_rateLimitExceeded_shouldThrowTooManyRequestsException() {
+            User user = User.builder().id(1).build();
+            when(securityUtil.getLoggedInUser()).thenReturn(user);
+            doThrow(new TooManyRequestsException("Too many requests"))
+                    .when(rateLimiterService).checkRateLimit(user.getId(), "WORKSPACE_UPDATE");
+
+            UpdateWorkSpaceRequest request = new UpdateWorkSpaceRequest("NewName", WorkSpaceType.TEAM);
+            assertThrows(TooManyRequestsException.class, () -> workSpaceService.updateWorkSpace(10, request));
+        }
     }
 }

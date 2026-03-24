@@ -9,11 +9,13 @@ import com.blockverse.app.entity.WorkSpaceMember;
 import com.blockverse.app.enums.WorkSpaceRole;
 import com.blockverse.app.exception.InsufficientPermissionException;
 import com.blockverse.app.exception.OwnerLevelException;
+import com.blockverse.app.exception.TooManyRequestsException;
 import com.blockverse.app.notification.NotificationService;
 import com.blockverse.app.repo.UserRepo;
 import com.blockverse.app.repo.WorkSpaceMemberRepo;
 import com.blockverse.app.repo.WorkSpaceRepo;
 import com.blockverse.app.security.SecurityUtil;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -25,8 +27,9 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 public class WorkspaceMemberServiceTest {
@@ -48,6 +51,9 @@ public class WorkspaceMemberServiceTest {
     
     @Mock
     private NotificationService notificationService;
+
+    @Mock
+    private RateLimiterService rateLimiterService;
     
     @InjectMocks
     private WorkSpaceMemberService service;
@@ -184,5 +190,53 @@ public class WorkspaceMemberServiceTest {
         int count = service.countMembersInWorkSpace(1);
         
         assertEquals(5, count);
+    }
+
+    // ========================================================================
+    // Rate Limiting
+    // ========================================================================
+
+    @Nested
+    class RateLimitingTests {
+
+        @Test
+        void addMember_rateLimitExceeded_shouldThrowTooManyRequestsException() {
+            User currentUser = User.builder().id(1).build();
+            WorkSpace workSpace = WorkSpace.builder().build();
+
+            when(securityUtil.getLoggedInUser()).thenReturn(currentUser);
+            doThrow(new TooManyRequestsException("Too many requests"))
+                    .when(rateLimiterService).checkRateLimit(currentUser.getId(), "ADD_WORKSPACE_MEMBER");
+
+            AddMemberRequest request = new AddMemberRequest("test@mail.com", WorkSpaceRole.MEMBER);
+            assertThrows(TooManyRequestsException.class, () -> service.addMemberToWorkSpace(1, request));
+            verify(workSpaceMemberRepo, never()).save(any());
+        }
+
+        @Test
+        void removeMember_rateLimitExceeded_shouldThrowTooManyRequestsException() {
+            User currentUser = User.builder().id(1).build();
+
+            when(securityUtil.getLoggedInUser()).thenReturn(currentUser);
+            doThrow(new TooManyRequestsException("Too many requests"))
+                    .when(rateLimiterService).checkRateLimit(currentUser.getId(), "REMOVE_WORKSPACE_MEMBER");
+
+            assertThrows(TooManyRequestsException.class,
+                    () -> service.removeMemberFromWorkSpace(1, "test@mail.com"));
+            verify(workSpaceMemberRepo, never()).save(any());
+        }
+
+        @Test
+        void changeMemberRole_rateLimitExceeded_shouldThrowTooManyRequestsException() {
+            User currentUser = User.builder().id(1).build();
+
+            when(securityUtil.getLoggedInUser()).thenReturn(currentUser);
+            doThrow(new TooManyRequestsException("Too many requests"))
+                    .when(rateLimiterService).checkRateLimit(currentUser.getId(), "CHANGE_MEMBER_ROLE");
+
+            ChangeMemberRoleRequest request = new ChangeMemberRoleRequest("test@mail.com", WorkSpaceRole.ADMIN);
+            assertThrows(TooManyRequestsException.class, () -> service.changeMemberRole(1, request));
+            verify(workSpaceMemberRepo, never()).save(any());
+        }
     }
 }
