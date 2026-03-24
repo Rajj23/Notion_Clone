@@ -32,6 +32,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> S3FileUploadException(S3FileUploadException ex) {
         return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to upload file to S3");
     }
+    
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<ErrorResponse> handleTooManyRequests(TooManyRequestsException ex) {
+        return buildError(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+    }
 
     @ExceptionHandler(UserNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleUserNotFound(UserNotFoundException ex) {

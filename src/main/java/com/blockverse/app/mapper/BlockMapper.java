@@ -1,7 +1,9 @@
 package com.blockverse.app.mapper;
 
+import com.blockverse.app.dto.block.BlockChangeLogResponse;
 import com.blockverse.app.dto.block.BlockResponse;
 import com.blockverse.app.entity.Block;
+import com.blockverse.app.entity.BlockChangeLog;
 import com.blockverse.app.enums.BlockType;
 import com.blockverse.app.service.S3Service;
 import lombok.RequiredArgsConstructor;
@@ -35,5 +37,20 @@ public class BlockMapper {
             response.setContent(block.getContent());
         }
         return response;
+    }
+    
+    public BlockChangeLogResponse toBlockChangeLogResponse(BlockChangeLog log) {
+        if (log == null) return null;
+
+        return BlockChangeLogResponse.builder()
+                .id(log.getId())
+                .documentId(log.getDocument().getId())
+                .blockId(log.getId())
+                .operationType(log.getOperationType())
+                .oldContent(log.getOldContent())
+                .newContent(log.getNewContent())
+                .versionNumber(log.getVersionNumber())
+                .createdAt(log.getCreatedAt())
+                .build();
     }
 }

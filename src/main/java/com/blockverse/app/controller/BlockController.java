@@ -49,7 +49,7 @@ public class BlockController {
     }
     
     @GetMapping("/history/{documentId}")
-    public ResponseEntity<List<BlockChangeLog>> getDocumentHistory(@PathVariable int documentId){
+    public ResponseEntity<List<BlockChangeLogResponse>> getDocumentHistory(@PathVariable int documentId){
         return ResponseEntity.ok(blockService.getDocumentHistory(documentId));
     }
 }

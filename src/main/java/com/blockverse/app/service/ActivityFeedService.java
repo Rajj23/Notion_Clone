@@ -26,9 +26,12 @@ public class ActivityFeedService {
     private final SecurityUtil securityUtil;
     private final WorkSpaceRepo workSpaceRepo;
     private final WorkSpaceMemberRepo workSpaceMemberRepo;
+    private final RateLimiterService rateLimiterService;
     
     public List<ActivityFeedResponse> getActivityFeed(int workspaceId, ActivityFeedRequest request) {
         User user = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(user.getId(), "ACTIVITY_FEED");
+        
         WorkSpace workSpace = workSpaceRepo.findByIdAndDeletedAtIsNull(workspaceId)
                 .orElseThrow(() -> new WorkSpaceNotFoundException("Workspace not found"));
         

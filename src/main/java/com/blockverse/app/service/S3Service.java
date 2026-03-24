@@ -27,6 +27,9 @@ public class S3Service {
     private String bucketName;
 
     public String uploadFile(MultipartFile file){
+        if (file.getSize() > 5 * 1024 * 1024) {
+            throw new IllegalArgumentException("File size exceeds 5MB limit");
+        }
         try{
             String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
 

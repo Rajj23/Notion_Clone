@@ -34,6 +34,7 @@ public class WorkSpaceService {
     private final WorkSpaceMemberRepo workSpaceMemberRepo;
     private final SecurityUtil securityUtil;
     private final AuditLogService auditLogService;
+    private final RateLimiterService rateLimiterService;
 
     private WorkSpace getWorkSpaceOrThrow(int workspaceId) {
         return workSpaceRepo.findByIdAndDeletedAtIsNull(workspaceId)
@@ -50,6 +51,7 @@ public class WorkSpaceService {
             throw new IllegalArgumentException("Workspace name cannot be empty");
         }
         User currentUser =  securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(currentUser.getId(), "WORKSPACE_CREATE");
         
         WorkSpace workSpace = workSpaceRepo.save(
                 WorkSpace.builder()
@@ -81,6 +83,7 @@ public class WorkSpaceService {
     
     public void deleteWorkSpace(int workspaceId){
         User currentUser =  securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(currentUser.getId(), "WORKSPACE_DELETE");
         
         WorkSpace workSpace = getWorkSpaceOrThrow(workspaceId);
         
@@ -121,6 +124,7 @@ public class WorkSpaceService {
             throw new IllegalArgumentException("Workspace name cannot be empty");
         }
         User currentUser =  securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(currentUser.getId(), "WORKSPACE_UPDATE");
         WorkSpace workSpace = getWorkSpaceOrThrow(workSpaceId);
         
         WorkSpaceMember membership =  workSpaceMemberRepo

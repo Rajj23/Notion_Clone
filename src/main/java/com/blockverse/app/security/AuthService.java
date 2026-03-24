@@ -6,6 +6,7 @@ import com.blockverse.app.exception.InvalidTokenException;
 import com.blockverse.app.entity.User;
 import com.blockverse.app.exception.UserNotFoundException;
 import com.blockverse.app.repo.UserRepo;
+import com.blockverse.app.service.RateLimiterService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -23,6 +24,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final UserRepo userRepo;
+    private final RateLimiterService rateLimiterService;
 
     public LoginResponseDTO login(LoginRequestDTO loginRequestDTO){
 
@@ -31,6 +33,7 @@ public class AuthService {
         );
 
         User user = (User) authentication.getPrincipal();
+        rateLimiterService.checkRateLimit(user.getId(), "USER_LOGIN");
 
         String accessToken = jwtUtil.generateAccessToken(user);
         String refreshToken = jwtUtil.generateRefreshToken(user);
@@ -53,6 +56,7 @@ public class AuthService {
                 .password(passwordEncoder.encode(signupRequestDTO.getPassword()))
                 .build()
         );
+        rateLimiterService.checkRateLimit(user.getId(), "USER_SIGNUP");
 
         String accessToken = jwtUtil.generateAccessToken(user);
         String refreshToken = jwtUtil.generateRefreshToken(user);

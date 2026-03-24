@@ -39,6 +39,7 @@ public class DocumentService {
     private final DocumentSocketPublisher documentSocketPublisher;
     private final DocumentShareRepo documentShareRepo;
     private final NotificationService notificationService;
+    private final RateLimiterService rateLimiterService;
     
     private String generateToken(){
         return UUID.randomUUID().toString();
@@ -62,6 +63,7 @@ public class DocumentService {
     public DocumentResponse createDocument(int workspaceId, CreateDocumentRequest request) {
 
         User currentUser = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(currentUser.getId(), "CREATE_DOCUMENT");
 
         WorkSpace workSpace = getWorkSpaceOrThrow(workspaceId);
 
@@ -134,6 +136,7 @@ public class DocumentService {
 
     public DocumentResponse updateDocument(int documentId, UpdateDocumentRequest request) {
         User user = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(user.getId(), "UPDATE_DOCUMENT");
 
         Document document = getDocumentOrThrow(documentId);
         if(document.isArchived() || document.isDeleted()) {
@@ -196,6 +199,7 @@ public class DocumentService {
 
     public void archiveDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(user.getId(), "ARCHIVE_DOCUMENT");
 
         Document document = documentRepo
                 .findByIdAndArchivedFalseAndDeletedFalse(documentId)
@@ -241,6 +245,7 @@ public class DocumentService {
 
     public void unarchiveDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(user.getId(), "UNARCHIVE_DOCUMENT");
 
         Document document = documentRepo
                 .findByIdAndArchivedTrueAndDeletedFalse(documentId)
@@ -285,6 +290,7 @@ public class DocumentService {
 
     public void deleteDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(user.getId(), "DELETE_DOCUMENT");
         Document document = documentRepo
                 .findByIdAndDeletedFalse(documentId)
                 .orElseThrow(() -> new DocumentNotFoundException("Document not found"));
@@ -334,6 +340,7 @@ public class DocumentService {
 
     public void restoreDeletedDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(user.getId(), "RESTORE_DOCUMENT");
         Document document = getDocumentOrThrow(documentId);
         WorkSpaceMember member = getMembershipOrThrow(user, document.getWorkSpace());
 
@@ -380,6 +387,7 @@ public class DocumentService {
 
     public void permanentDeleteDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(user.getId(), "PERMANENT_DELETE_DOCUMENT");
         Document document = getDocumentOrThrow(documentId);
         WorkSpaceMember member = getMembershipOrThrow(user, document.getWorkSpace());
 
@@ -442,6 +450,7 @@ public class DocumentService {
     
     public ShareLinkResponse createShareLink(int documentId, int expiryMinutes) {
         User user = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(user.getId(), "CREATE_SHARE_LINK");
         Document document = getDocumentOrThrow(documentId);
         WorkSpaceMember member = getMembershipOrThrow(user, document.getWorkSpace());
 

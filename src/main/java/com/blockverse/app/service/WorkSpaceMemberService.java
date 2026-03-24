@@ -38,6 +38,7 @@ public class WorkSpaceMemberService {
     private final SecurityUtil securityUtil;
     private final AuditLogService auditLogService;
     private final NotificationService notificationService;
+    private final RateLimiterService rateLimiterService;
 
     
     private WorkSpace getWorkSpaceOrThrow(int workspaceId) {
@@ -63,6 +64,7 @@ public class WorkSpaceMemberService {
     public void addMemberToWorkSpace(int workspaceId, AddMemberRequest request){
         
         User currentUser = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(currentUser.getId(), "ADD_WORKSPACE_MEMBER");
         WorkSpace workSpace = getWorkSpaceOrThrow(workspaceId);
         
         WorkSpaceMember currentUserMembership =  getMembershipOrThrow(currentUser, workSpace);
@@ -127,6 +129,7 @@ public class WorkSpaceMemberService {
     
     public void removeMemberFromWorkSpace(int workspaceId, String email){
         User currentUser = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(currentUser.getId(), "REMOVE_WORKSPACE_MEMBER");
         WorkSpace workSpace = getWorkSpaceOrThrow(workspaceId);
         
         WorkSpaceMember currentUserMembership = getMembershipOrThrow(currentUser, workSpace);
@@ -171,6 +174,7 @@ public class WorkSpaceMemberService {
     
     public void changeMemberRole(int workspaceId, ChangeMemberRoleRequest request){
         User currentUser = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(currentUser.getId(), "CHANGE_MEMBER_ROLE");
         WorkSpace workSpace = getWorkSpaceOrThrow(workspaceId);
         
         WorkSpaceMember currentUserMembership = getMembershipOrThrow(currentUser, workSpace);

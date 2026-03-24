@@ -19,6 +19,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static java.util.stream.Collectors.toList;
+
 @Service
 @Transactional
 @RequiredArgsConstructor
@@ -32,6 +34,7 @@ public class BlockService {
     private final AuditLogService auditLogService;
     private final DocumentSocketPublisher documentSocketPublisher;
     private final BlockMapper blockMapper;
+    private final RateLimiterService rateLimiterService;
 
     private Document getDocumentOrThrow(int documentId) {
         return documentRepo.findById(documentId)
@@ -112,7 +115,7 @@ public class BlockService {
 
     public BlockResponse createBlock(int documentId, CreateBlockRequest request){
         User currentUser = securityUtil.getLoggedInUser();
-
+        rateLimiterService.checkRateLimit(currentUser.getId(), "CREATE_BLOCK");
         Document document = getDocumentOrThrow(documentId);
         checkActiveDocument(document);
         WorkSpace workSpace = document.getWorkSpace();
@@ -233,6 +236,7 @@ public class BlockService {
 
     public BlockResponse updateBlock(int blockId, UpdateBlockRequest request) {
         User currentUser = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(currentUser.getId(), "UPDATE_BLOCK");
         Block block = getBlockOrThrow(blockId);
 
         Document document = block.getDocument();
@@ -284,6 +288,7 @@ public class BlockService {
 
     public void deleteBlock(int blockId, DeleteBlockRequest request) {
         User currentUser = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(currentUser.getId(), "DELETE_BLOCK");
         Block block = getBlockOrThrow(blockId);
 
         if(block.isDeleted()){
@@ -348,6 +353,7 @@ public class BlockService {
 
     public BlockResponse moveBlock(int blockId, MoveBlockRequest request) {
         User user = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(user.getId(), "MOVE_BLOCK");
         Block block = getBlockOrThrow(blockId);
         Document document = block.getDocument();
         checkActiveDocument(document);
@@ -410,6 +416,7 @@ public class BlockService {
     @Transactional
     public void restoreDocumentVersion(int documentId, RestoreDocumentVersionRequest request){
         User user = securityUtil.getLoggedInUser();
+        rateLimiterService.checkRateLimit(user.getId(), "RESTORE_DOCUMENT");
         Document document = getDocumentOrThrow(documentId);
         checkActiveDocument(document);
         getMembershipOrThrow(user, document.getWorkSpace());
@@ -483,12 +490,15 @@ public class BlockService {
         documentRepo.save(document);
     }
     
-    public List<BlockChangeLog> getDocumentHistory(int documentId){
+    public List<BlockChangeLogResponse> getDocumentHistory(int documentId){
         User user = securityUtil.getLoggedInUser();
         Document document = getDocumentOrThrow(documentId);
         getMembershipOrThrow(user, document.getWorkSpace());
 
-        return blockChangeLogRepo.findByDocumentOrderByVersionNumberDesc(document);
+        return blockChangeLogRepo.findByDocumentOrderByVersionNumberDesc(document)
+                .stream()
+                .map(blockMapper::toBlockChangeLogResponse)
+                .toList();
     }
 
 }
