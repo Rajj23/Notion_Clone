@@ -14,11 +14,11 @@ public interface BlockRepo extends JpaRepository<Block, Integer> {
     List<Block> findByParentAndDeletedFalseOrderByPositionAsc(Block parent);
     List<Block> findByDocumentAndParentIsNull(Document document);
 
-    @Query(value = "SELECT b.* FROM block b " +
-            "JOIN document d ON b.document_id = d.id " +
-            "WHERE d.workspace_id = :workSpaceId " +
-            "AND b.content LIKE CONCAT('%', :keyword, '%')",
-            nativeQuery = true)
+    @Query(value = "SELECT b.* FROM block b " + 
+                   "JOIN document d ON b.document_id = d.id " + 
+                    "WHERE d.workspace_id = :workSpaceId " +
+                    "AND MATCH(b.content) AGAINST(:keyword IN BOOLEAN MODE)",
+                     nativeQuery = true)
     List<Block> searchBlocks(@Param("keyword") String keyword,
                              @Param("workSpaceId") int workSpaceId);
 }

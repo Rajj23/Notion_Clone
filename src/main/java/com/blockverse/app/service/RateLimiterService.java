@@ -16,11 +16,15 @@ public class RateLimiterService {
     
     private final Map<String, Bucket> cache = new ConcurrentHashMap<>();
     
+    public void clearCache() {
+        cache.clear();
+    }
+    
     private Bucket createNewBucketForAction(String action) {
         Bandwidth limit;
         switch (action) {
             case "CREATE_BLOCK":
-                limit = Bandwidth.simple(15, Duration.ofMinutes(1)); // 20 requests per minute
+                limit = Bandwidth.simple(25, Duration.ofMinutes(1)); // 20 requests per minute
                 break; 
             case "UPDATE_BLOCK": 
                 limit = Bandwidth.simple(30, Duration.ofMinutes(1)); // 20 requests per minute
@@ -38,7 +42,7 @@ public class RateLimiterService {
                 limit = Bandwidth.simple(5, Duration.ofMinutes(1)); // 5 uploads per minute
                 break;
             case "SEARCH":
-                limit = Bandwidth.simple(15, Duration.ofMinutes(1)); // 15 searches per minute
+                limit = Bandwidth.simple(20, Duration.ofMinutes(1)); // 20 searches per minute
                 break;
             case "ACTIVITY_FEED":
                 limit = Bandwidth.simple(30, Duration.ofMinutes(1)); // 30 feed loads per minute

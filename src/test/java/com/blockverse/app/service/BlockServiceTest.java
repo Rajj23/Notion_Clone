@@ -993,7 +993,7 @@ class BlockServiceTest {
             when(blockChangeLogRepo.findByDocumentOrderByVersionNumberDesc(testDocument))
                     .thenReturn(List.of(log1, log2));
 
-            List<BlockChangeLog> result = blockService.getDocumentHistory(1);
+            List<BlockChangeLogResponse> result = blockService.getDocumentHistory(1);
 
             assertEquals(2, result.size());
             assertEquals(2L, result.get(0).getVersionNumber());
@@ -1008,7 +1008,7 @@ class BlockServiceTest {
             when(blockChangeLogRepo.findByDocumentOrderByVersionNumberDesc(testDocument))
                     .thenReturn(List.of());
 
-            List<BlockChangeLog> result = blockService.getDocumentHistory(1);
+            List<BlockChangeLogResponse> result = blockService.getDocumentHistory(1);
 
             assertTrue(result.isEmpty());
         }

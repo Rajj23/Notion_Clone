@@ -17,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.annotation.DirtiesContext;
+import com.blockverse.app.service.RateLimiterService;
 
 
 @SpringBootTest(properties = "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}")
@@ -30,6 +31,14 @@ class FullFlowIntegrationTest {
 
         @Autowired
         private MockMvc mockMvc;
+
+        @Autowired
+        private RateLimiterService rateLimiterService;
+
+        @BeforeEach
+        void clearRateLimiterCache() {
+                rateLimiterService.clearCache();
+        }
 
         // ── Helper: signup and extract accessToken ───────────────────────────────
         private String signupAndGetToken(String name, String email, String password) throws Exception {

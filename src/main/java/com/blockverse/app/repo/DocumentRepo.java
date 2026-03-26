@@ -22,9 +22,9 @@ public interface DocumentRepo extends JpaRepository<Document, Integer> {
 
     List<Document> findByWorkSpaceAndDeletedTrue(WorkSpace workSpace);
 
-    @Query(value = "SELECT * FROM document " +
-            "WHERE workspace_id = :workSpaceId " +
-            "AND title LIKE CONCAT('%', :keyword, '%')",
+    @Query(value = "SELECT * FROM  document " +
+            "where workspace_id = :workSpaceId " +
+            "AND MATCH(title) AGAINST(:keyword IN BOOLEAN MODE)",
             nativeQuery = true)
     List<Document> searchDocuments(@Param("keyword") String keyword,
                                    @Param("workSpaceId") int workSpaceId);
