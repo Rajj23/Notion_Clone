@@ -46,6 +46,11 @@ public class DocumentController {
         documentService.archiveDocument(documentId);
         return ResponseEntity.ok("Document archived successfully");
     }
+
+    @GetMapping("/workspace/{workspaceId}/archived")
+    public ResponseEntity<List<DocumentResponse>> getArchivedDocuments(@PathVariable int workspaceId) {
+        return ResponseEntity.ok(documentService.getArchivedDocumentsByWorkspace(workspaceId));
+    }
     
     @PostMapping("/{documentId}/restore")
     public ResponseEntity<String> restoreArchivedDocument(@PathVariable int documentId){
@@ -53,13 +58,13 @@ public class DocumentController {
         return ResponseEntity.ok("Document restored successfully");
     }  
     
-    @DeleteMapping("/{documentId}/delete")
+    @PostMapping("/{documentId}/delete")
     public ResponseEntity<String> deleteDocument(@PathVariable int documentId){
         documentService.deleteDocument(documentId);
         return ResponseEntity.ok("Document deleted successfully");
     }
     
-    @DeleteMapping("/{documentId}/restore")
+    @PostMapping("/{documentId}/restore-deleted")
     public ResponseEntity<String> restoreDeletedDocument(@PathVariable int documentId){
         documentService.restoreDeletedDocument(documentId);
         return ResponseEntity.ok("Document restored successfully");

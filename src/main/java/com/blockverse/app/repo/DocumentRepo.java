@@ -28,4 +28,6 @@ public interface DocumentRepo extends JpaRepository<Document, Integer> {
             nativeQuery = true)
     List<Document> searchDocuments(@Param("keyword") String keyword,
                                    @Param("workSpaceId") int workSpaceId);
+
+    List<Document> findByWorkSpaceIdAndArchivedTrueAndDeletedFalse(int workspaceId);
 }

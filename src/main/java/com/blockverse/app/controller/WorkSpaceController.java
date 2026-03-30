@@ -18,12 +18,12 @@ public class WorkSpaceController {
     
     private final WorkSpaceService workSpaceService;
     
-    @PostMapping("/create")
+    @PostMapping("/")
     public ResponseEntity<String> createWorkSpace(@Valid @RequestBody WorkSpaceCreateRequest request){
         return ResponseEntity.ok(workSpaceService.createWorkSpace(request));
     }
     
-    @DeleteMapping("/delete/{workSpaceId}")
+    @DeleteMapping("/{workSpaceId}")
     public ResponseEntity<String> deleteWorkSpace(@PathVariable int workSpaceId){
         workSpaceService.deleteWorkSpace(workSpaceId);
         return ResponseEntity.ok("WorkSpace deleted successfully");
@@ -39,7 +39,7 @@ public class WorkSpaceController {
         return ResponseEntity.ok(workSpaceService.getWorkSpaceDetails(workSpaceId));
     }
     
-    @PutMapping("/update/{workSpaceId}")
+    @PutMapping("/{workSpaceId}")
     public ResponseEntity<String> updateWorkSpace(@PathVariable int workSpaceId, @RequestBody UpdateWorkSpaceRequest request) {
                 workSpaceService.updateWorkSpace(workSpaceId, request);
         return ResponseEntity.ok("WorkSpace updated successfully");

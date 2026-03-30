@@ -243,6 +243,22 @@ public class DocumentService {
         documentRepo.save(document);
     }
 
+    public List<DocumentResponse> getArchivedDocumentsByWorkspace(int workspaceId) {
+        User user = securityUtil.getLoggedInUser();
+        
+        WorkSpace workSpace = getWorkSpaceOrThrow(workspaceId);
+
+        WorkSpaceMember membership = getMembershipOrThrow(user, workSpace);
+
+        if (membership.getRole() != WorkSpaceRole.OWNER && membership.getRole() != WorkSpaceRole.ADMIN) {
+            throw new InsufficientPermissionException("Only workspace owners or admin can archive documents");
+        }
+        
+        return documentRepo
+                .findByWorkSpaceIdAndArchivedTrueAndDeletedFalse(workspaceId)
+                .stream().map(documentMapper::toResponse).toList();
+    }
+
     public void unarchiveDocument(int documentId) {
         User user = securityUtil.getLoggedInUser();
         rateLimiterService.checkRateLimit(user.getId(), "UNARCHIVE_DOCUMENT");
