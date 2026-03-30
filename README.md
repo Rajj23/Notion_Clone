@@ -1,174 +1,229 @@
-# BlockVerse — Backend API
+# BlockVerse
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Java-21-orange?style=flat-square&logo=openjdk&logoColor=white" alt="Java 21" />
-  <img src="https://img.shields.io/badge/Spring%20Boot-4.0-6DB33F?style=flat-square&logo=springboot&logoColor=white" alt="Spring Boot 4" />
-  <img src="https://img.shields.io/badge/Security-JWT-6DB33F?style=flat-square&logo=springsecurity&logoColor=white" alt="JWT" />
-  <img src="https://img.shields.io/badge/Build-Maven-C71A36?style=flat-square&logo=apachemaven&logoColor=white" alt="Maven" />
-  <img src="https://img.shields.io/badge/Tests-JUnit%205-25A162?style=flat-square&logo=junit5&logoColor=white" alt="JUnit 5" />
-  <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="MIT" />
-</p>
+> A collaborative, block-based workspace platform — built on Spring Boot 4.
 
-REST API backend for a collaborative block-based workspace application. Supports JWT authentication, workspace management, role-based access control, document CRUD, and hierarchical block operations — built with Spring Boot 4 and Java 21.
+
+
+![BlockVerse](./Blockverse.png)
+
+**Layers:**
+
+| Layer | Responsibility |
+|---|---|
+| Controller | HTTP routing, request binding, response shaping |
+| Service | Business logic, auth checks, rate limiting, audit |
+| Repository | Spring Data JPA — MySQL (prod) / H2 (test) |
+| Security | Stateless JWT filter chain (Spring Security) |
+| Messaging | Kafka producer/consumer for async notifications |
+| WebSocket | STOMP over WS — real-time cursor, presence, typing |
+
+---
+
+## Tech Stack
+
+| Technology | Version | Rationale |
+|---|---|---|
+| Spring Boot | 4.0.3 | Latest major; out-of-the-box autoconfiguration |
+| Java | 21 (preview) | Virtual threads eligibility, records, pattern matching |
+| Spring Security | (boot-managed) | Stateless JWT filter chain; CSRF disabled for SPA compatibility |
+| jjwt | 0.12.6 | HS512 access + refresh token pair |
+| Spring Data JPA / Hibernate | (boot-managed) | ORM, `@Version` optimistic locking on `Document` |
+| MySQL | 8.x (runtime) | Production datastore |
+| H2 | runtime (test) | Zero-config in-memory DB for unit/integration tests |
+| Apache Kafka | 7.5.3 (Confluent) | Async, decoupled bulk-notification pipeline |
+| Spring WebSocket / STOMP | (boot-managed) | Real-time collaboration (cursor, presence, typing) |
+| AWS SDK v2 | 2.25.27 | S3 file storage with BOM-managed dependency graph |
+| Bucket4j | 8.7.0 | In-process token-bucket rate limiting per user+action |
+| ModelMapper | 3.1.1 | DTO↔Entity mapping |
+| Lombok | (latest) | Boilerplate elimination |
 
 ---
 
 ## Quick Start
 
+### Prerequisites
+
+- Java 21+
+- Maven 3.9+
+- Docker & Docker Compose
+- MySQL 8.x running locally **or** update `application.properties` with your DB URL
+- AWS credentials (S3 bucket pre-created)
+
+### 1. Start Kafka Infrastructure
+
 ```bash
-git clone https://github.com/Rajj23/BlockVerse.git
-cd BlockVerse
-mvn clean install
-mvn spring-boot:run
+docker-compose up -d
 ```
 
-Uses H2 in-memory database by default. No external setup required.
+This spins up:
+- Zookeeper on `:2181`
+- Kafka broker on `:9092`
+
+### 2. Configure Environment
+
+Create `src/main/resources/application.properties` (not committed — add your values):
 
 ```properties
-# src/main/resources/application.properties
-jwt.secret=your-secret-key
-jwt.accessTokenValidity=900000        # 15 min
-jwt.refreshTokenValidity=604800000    # 7 days
+# DB
+spring.datasource.url=jdbc:mysql://localhost:3306/blockverse
+spring.datasource.username=<user>
+spring.datasource.password=<pass>
+spring.jpa.hibernate.ddl-auto=update
+
+# JWT
+jwt.secret=<min-64-char-secret>
+jwt.accessTokenValidity=900000       # 15 min in ms
+jwt.refreshTokenValidity=604800000   # 7 days in ms
+
+# AWS S3
+aws.s3.bucket=<bucket-name>
+aws.s3.region=<region>
+aws.accessKeyId=<key>
+aws.secretAccessKey=<secret>
+
+# Kafka
+spring.kafka.bootstrap-servers=localhost:9092
 ```
 
----
-
-## Architecture
-
-```
-Client → JwtAuthFilter → SecurityContext → Controller → Service → Repository → H2
-```
-
-| Concern    | Implementation                                                              |
-|------------|-----------------------------------------------------------------------------|
-| Auth       | Stateless JWT (access + refresh token rotation), BCrypt password hashing    |
-| Validation | Jakarta Bean Validation on all request DTOs                                 |
-| Errors     | Global `@RestControllerAdvice` with a consistent error response shape       |
-| Tests      | `@WebMvcTest` controller tests + `@ExtendWith(MockitoExtension)` unit tests |
-
----
-
-## API
-
-Base URL: `http://localhost:8080`
-
-### Auth `/v1/auth` — public
-
-| Method | Endpoint   | Body                          | Returns                          |
-|--------|------------|-------------------------------|----------------------------------|
-| POST   | `/signup`  | `{ name, email, password }`   | `{ accessToken, refreshToken }` |
-| POST   | `/login`   | `{ email, password }`         | `{ accessToken, refreshToken }` |
-| POST   | `/refresh` | `{ refreshToken }`            | `{ accessToken, refreshToken }` |
-
-### Workspaces `/v1/workspaces` — authenticated
-
-| Method | Endpoint        | Body / Params           | Returns                     |
-|--------|-----------------|-------------------------|-----------------------------|
-| POST   | `/create`       | `{ name, workSpaceType }` | `"WorkSpace created…"`    |
-| GET    | `/all`          | —                       | `WorkSpaceDetailsResponse[]` |
-| GET    | `/{id}`         | —                       | `WorkSpaceDetailsResponse`  |
-| PUT    | `/update/{id}`  | `{ name, workSpaceType }` | `"WorkSpace updated…"`    |
-| DELETE | `/delete/{id}`  | —                       | `"WorkSpace deleted…"`      |
-
-Types: `PRIVATE`, `TEAM`
-
-### Members `/v1/workspace/member/{workspaceId}` — authenticated, RBAC
-
-| Method | Endpoint                             | Body / Params         | Access        |
-|--------|--------------------------------------|-----------------------|---------------|
-| POST   | `/add`                               | `{ email, role }`     | OWNER, ADMIN  |
-| DELETE | `/remove?email=`                     | query param           | OWNER, ADMIN  |
-| POST   | `/change-role`                       | `{ email, role }`     | OWNER, ADMIN  |
-| POST   | `/leave`                             | —                     | ADMIN, MEMBER |
-| POST   | `/transfer-ownership?newOwnerEmail=` | query param           | OWNER only    |
-| GET    | `/count-members`                     | —                     | Any member    |
-
-Roles: `OWNER` / `ADMIN` / `MEMBER`
-
-#### Permission Matrix
-
-| Action             | OWNER | ADMIN  | MEMBER |
-|--------------------|:-----:|:------:|:------:|
-| Add member         |  Yes  |  Yes   |  No    |
-| Remove member      |  Yes  |  Yes*  |  No    |
-| Assign OWNER role  |  Yes  |  No    |  No    |
-| Change role        |  Yes  |  Yes   |  No    |
-| Transfer ownership |  Yes  |  No    |  No    |
-| Delete workspace   |  Yes  |  No    |  No    |
-| Leave workspace    |  No   |  Yes   |  Yes   |
-
-*Admins cannot remove other admins or the owner.*
-
-### Documents `/v1/documents` — authenticated, workspace-scoped
-
-| Method | Endpoint                        | Body / Params        | Access         |
-|--------|---------------------------------|----------------------|----------------|
-| POST   | `/{workspaceId}`                | `{ title }`          | Any member     |
-| GET    | `/{documentId}`                 | —                    | Any member     |
-| GET    | `/{documentId}/blocks`          | —                    | Any member     |
-| GET    | `/workspace/{workspaceId}`      | —                    | Any member     |
-| PUT    | `/{documentId}`                 | `{ title }`          | Any member     |
-| POST   | `/{documentId}/archive`         | —                    | OWNER, ADMIN   |
-| POST   | `/{documentId}/unarchive`       | —                    | OWNER, ADMIN   |
-
-### Blocks `/v1/blocks` — authenticated, workspace-scoped
-
-| Method | Endpoint                  | Body                                              | Notes                        |
-|--------|---------------------------|---------------------------------------------------|------------------------------|
-| POST   | `/{documentId}`           | `{ parentId?, type, content, documentVersion? }`  | Creates block at end of list |
-| PUT    | `/{blockId}`              | `{ type, content, documentVersion? }`             | Updates content and type     |
-| DELETE | `/{blockId}`              | `{ documentVersion? }`                            | Soft delete                  |
-| PUT    | `/{blockId}/move`         | `{ newParentId?, newPosition, documentVersion? }` | Reparent or reorder          |
-| GET    | `/{blockId}/children`     | —                                                 | Returns direct children      |
-
-Block types: `PARAGRAPH`, `HEADING1`, `HEADING2`, `HEADING3`, `BULLET`, `NUMBERED`, `QUOTE`, `CODE`
-
-Positions use a `BigInteger` gap strategy (increments of 10,000) to allow insertion without reordering. All mutations record a `BlockChangeLog` entry and enforce optimistic concurrency via `documentVersion`.
-
----
-
-## Error Response
-
-```json
-{
-  "status": 403,
-  "message": "Forbidden",
-  "error": "Only workspace owners and admin can add members",
-  "timestamp": "2026-03-09T10:00:00"
-}
-```
-
-| Status | Condition                                              |
-|--------|--------------------------------------------------------|
-| 400    | Validation failure, duplicate member, owner leave, block level constraint |
-| 401    | Invalid or expired token                               |
-| 403    | Insufficient permission, not a workspace member        |
-| 404    | User, workspace, document, or block not found          |
-| 409    | Email already registered, document version conflict    |
-
----
-
-## Testing
-
-Controller tests use `@WebMvcTest` with security filters disabled and all dependencies mocked via `@MockitoBean`.  
-Service tests use `@ExtendWith(MockitoExtension.class)` with all repositories and utilities mocked.
+### 3. Build & Run
 
 ```bash
-mvn test
+./mvnw spring-boot:run
 ```
 
-| Suite                            | Coverage                                                            |
-|----------------------------------|---------------------------------------------------------------------|
-| `AuthControllerTest`             | Login, signup, validation                                           |
-| `WorkspaceControllerTest`        | CRUD, permission errors, input validation                           |
-| `WorkspaceMemberControllerTest`  | All 6 endpoints, permission matrix, validation                      |
-| `BlockControllerTest`            | Create, update, delete, move, get children — success and error paths |
-| `DocumentControllerTest`         | Create, get, list, update, archive, unarchive — full permission coverage |
-| `AuthServiceTest`                | Token generation, signup, login, refresh token flow, error cases    |
-| `WorkspaceServiceTest`           | Create, update, delete, ownership transfer, member listing          |
-| `WorkspaceMemberServiceTest`     | Add, remove, role change, leave, transfer ownership, member count   |
-| `BlockServiceTest`               | Create (root/child/position/conflicts), update, delete, move, get children |
-| `DocumentServiceTest`            | Create, get, list, update, archive, unarchive — all role combinations |
+App starts on `http://localhost:8080`.
+
+### 4. Run Tests
+
+```bash
+./mvnw test
+```
+
+Tests use H2 in-memory DB and an embedded Kafka broker (spring-kafka-test).
+
+---
+
+## API & Component Design
+
+### Base URL
+
+`http://localhost:8080`
+
+### Authentication
+
+All endpoints under `/v1/**` require `Authorization: Bearer <access_token>`.
+
+Public routes: `/v1/auth/**`, `/ws/**`, `/share/**`
+
+### Core Endpoints
+
+#### Auth — `/v1/auth`
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/register` | Register user → returns access + refresh tokens |
+| `POST` | `/login` | Login → returns access + refresh tokens |
+| `POST` | `/refresh` | Exchange refresh token → new access token |
+
+#### Workspaces — `/v1/workspaces`
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/` | Create workspace |
+| `GET` | `/{id}` | Get workspace |
+| `PUT` | `/{id}` | Update workspace |
+| `DELETE` | `/{id}` | Soft-delete workspace |
+| `GET` | `/` | List user's workspaces |
+
+#### Workspace Members — `/v1/workspaces/{wsId}/members`
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/invite` | Invite member (OWNER/ADMIN only) |
+| `PUT` | `/{memberId}/role` | Change member role |
+| `DELETE` | `/{memberId}` | Remove member |
+| `GET` | `/` | List members |
+
+#### Documents — `/v1/workspaces/{wsId}/documents`
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/` | Create document |
+| `GET` | `/{docId}` | Get document metadata |
+| `GET` | `/{docId}/blocks` | Get document + all blocks |
+| `PUT` | `/{docId}` | Update document title |
+| `DELETE` | `/{docId}` | Soft-delete (move to trash) |
+| `POST` | `/{docId}/archive` | Archive document |
+| `POST` | `/{docId}/unarchive` | Unarchive document |
+| `POST` | `/{docId}/restore` | Restore from trash |
+| `DELETE` | `/{docId}/permanent` | Permanent delete |
+| `POST` | `/{docId}/share` | Create share link with TTL |
+| `GET` | `/trash` | List trashed documents |
+
+#### Blocks — `/v1/documents/{docId}/blocks`
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/` | Create block |
+| `PUT` | `/{blockId}` | Update block content/type |
+| `DELETE` | `/{blockId}` | Soft-delete block |
+| `PUT` | `/{blockId}/move` | Reorder block (position update) |
+| `GET` | `/{blockId}/history` | Block change history |
+
+#### Files — `/v1/files`
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/upload` | Upload file to S3 (5/min rate limit) |
+
+#### Search — `/v1/search`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/?keyword=&workspaceId=` | Full-text search across docs + blocks (15/min) |
+
+#### Notifications — `/v1/notifications`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/` | All notifications for current user |
+| `GET` | `/unread` | Unread only |
+| `PUT` | `/{id}/read` | Mark one as read |
+| `PUT` | `/read-all` | Mark all as read |
+
+#### Activity Feed — `/v1/workspaces/{wsId}/activity`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/` | Paginated audit log for workspace (30/min) |
+
+#### Share (public) — `/share`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/{token}` | Access shared document via UUID token (no auth) |
+
+### WebSocket Topics (STOMP)
+
+| Destination | Description |
+|---|---|
+| `/ws` | WebSocket handshake endpoint |
+| `/app/cursor` | Broadcast cursor position |
+| `/app/presence` | User join/leave events |
+| `/app/typing` | Typing indicator |
+| `/topic/document/{id}` | Subscribe to document mutation events |
+
+### Key Domain Models
+
+```
+WorkSpace (1) ──< WorkSpaceMember (role: OWNER|ADMIN|MEMBER)
+WorkSpace (1) ──< Document (soft-delete + archive + @Version OCC)
+Document  (1) ──< Block (self-referential tree, position: BigInteger)
+Document  (1) ──< DocumentShare (UUID token, TTL)
+Document  (1) ──< BlockChangeLog
+Document  (1) ──< AuditLog
+User      (1) ──< Notification
+```
 
 ---
 
@@ -176,41 +231,15 @@ mvn test
 
 ```
 src/main/java/com/blockverse/app/
-├── config/        # AppConfig — AuthenticationManager, PasswordEncoder, ModelMapper beans
-├── controller/    # AuthController, WorkSpaceController, WorkSpaceMemberController,
-│                  # DocumentController, BlockController
-├── dto/           # Request / response DTOs with Bean Validation
-├── entity/        # User, WorkSpace, WorkSpaceMember, Document, Block, BlockChangeLog
-├── enums/         # WorkSpaceRole, WorkSpaceType, BlockType, BlockOperationType
-├── exception/     # Custom exceptions + GlobalExceptionHandler
-├── mapper/        # BlockMapper, DocumentMapper
-├── repo/          # Spring Data JPA repositories
-├── security/      # JwtUtil, JwtAuthFilter, AuthService, CustomUserDetailService,
-│                  # SecurityUtil, WebSecurityConfig
-└── service/       # WorkSpaceService, WorkSpaceMemberService, DocumentService, BlockService
+├── config/          # Kafka, S3, WebSocket config beans
+├── controller/      # REST + WebSocket controllers (13 files)
+├── dto/             # Request/Response DTOs
+├── entity/          # JPA entities (9 files)
+├── enums/           # BlockType, WorkSpaceRole, NotificationType, etc.
+├── exception/       # Domain exceptions → HTTP status mapping
+├── mapper/          # ModelMapper wrappers (DocumentMapper, BlockMapper, …)
+├── notification/    # Kafka producer, consumer, NotificationService
+├── repo/            # Spring Data JPA repositories
+├── security/        # JwtUtil, JwtAuthFilter, WebSecurityConfig, SecurityUtil
+└── service/         # Core business logic services
 ```
-
----
-
-## Roadmap
-
-- [x] JWT auth with refresh token rotation
-- [x] Workspace CRUD with ownership enforcement
-- [x] Role-based member management (OWNER / ADMIN / MEMBER)
-- [x] Global exception handling
-- [x] Bean Validation on all endpoints
-- [x] Document CRUD with archive/unarchive
-- [x] Hierarchical block model with position gap strategy
-- [x] Optimistic concurrency via document versioning
-- [x] Block change log
-- [x] Controller and service unit tests (full coverage)
-- [ ] Page sharing and granular per-document permissions
-- [ ] Full-text search
-- [ ] WebSocket real-time collaboration
-- [ ] Frontend
-
----
-
-## License
-
-MIT
